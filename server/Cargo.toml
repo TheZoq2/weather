@@ -1,0 +1,13 @@
+[package]
+name = "server"
+version = "0.1.0"
+authors = ["TheZoq2 <frans.skarman@gmail.com>"]
+
+[dependencies]
+simple-server = {git = "https://github.com/steveklabnik/simple-server"}
+serde = "1.0.25"
+http = "0.1.1"
+
+
+serde_json = "1.0.8"
+
