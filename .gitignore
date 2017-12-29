@@ -1,0 +1,11 @@
+# Private/local config files
+wifidetails.h
+paths.mk
+
+# Buid files
+a.out
+
+server/Cargo.lock
+server/frontend/elm-stuff
+
+build-teensyLC
