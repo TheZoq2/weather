@@ -13,8 +13,6 @@ pub fn run_server(readings: ReadingCollection) {
         let request_path = request.uri().path();
         let request_path_parts = request_path.split("/").collect::<Vec<_>>();
 
-        println!("got request: {:?} {}", request_path_parts, request.uri());
-
         let request_response = match request_path_parts[1] {
             "data" => {
                 let name = request_path_parts.get(2).expect("Data query must specify a data name");
