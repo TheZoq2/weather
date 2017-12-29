@@ -9,6 +9,8 @@ import Svg
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 
+import Graph
+
 type alias Model =
     { temperature: List Float
     }
@@ -63,11 +65,11 @@ view model =
     div
         []
         ( [ svg
-            [ viewBox <| "0 -30" ++ (toString viewWidth) ++ "70"
+            [ viewBox <| "0 0 " ++ (toString viewWidth) ++ " " ++ (toString viewHeight)
             , width <| toString viewWidth ++ "px"
             , height <| toString viewHeight ++ "px"
             ]
-            [ drawGraph viewDimensions (0, 40) model.temperature
+            [ Graph.drawGraph viewDimensions (-10, 40) model.temperature
             ]
         ]
         ++ case List.head <| List.reverse model.temperature of
@@ -80,24 +82,6 @@ view model =
 
 
 
-
-drawGraph : (Int, Int) -> (Float, Float) -> List Float -> Svg Msg
-drawGraph (viewW, viewH) (min, max) data =
-    let
-        x_points =
-            List.range 0 (List.length data)
-            |> List.map (\x -> toFloat x / toFloat (List.length data) * (toFloat viewW))
-
-        pointsString =
-            List.map (\y -> (toFloat viewH) * (y + min) / max - (min/max)) data
-            |> List.map (\y -> (toFloat viewH) - y)
-            |> List.map2 (,) x_points
-            |> List.map (\(x,y) -> toString x ++ "," ++ toString y)
-            |> List.intersperse " "
-            |> String.concat
-
-    in
-        polyline [fill "none", stroke "black", points pointsString] []
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
