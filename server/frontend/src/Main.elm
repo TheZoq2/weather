@@ -61,17 +61,29 @@ view model =
         viewHeight = 400
 
         viewDimensions = (viewWidth, viewHeight)
+
+        valueRange = (-10, 40)
+
+        horizontalStep = 5
     in
     div
         []
         ( [ svg
+            [ viewBox <| "0 0 " ++ "20" ++ " " ++ (toString viewHeight)
+            , width <| toString 40 ++ "px"
+            , height <| toString viewHeight ++ "px"
+            ]
+            [ Graph.drawLegend "°C" viewHeight valueRange horizontalStep
+            ]
+          , svg
             [ viewBox <| "0 0 " ++ (toString viewWidth) ++ " " ++ (toString viewHeight)
             , width <| toString viewWidth ++ "px"
             , height <| toString viewHeight ++ "px"
             ]
-            [ Graph.drawGraph viewDimensions (-10, 40) model.temperature
+            [ Graph.drawHorizontalLines viewDimensions valueRange horizontalStep
+            , Graph.drawGraph viewDimensions valueRange model.temperature
             ]
-        ]
+          ]
         ++ case List.head <| List.reverse model.temperature of
                 Just value ->
                     [h1 [] [Html.text <| toString value]]
