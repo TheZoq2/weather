@@ -1,0 +1,7 @@
+http_port = 8080
+http_address = "0.0.0.0"
+
+tcp_port = 2000
+tcp_address = "0.0.0.0"
+
+log_filename = "data.json"

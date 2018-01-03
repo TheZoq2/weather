@@ -5,10 +5,7 @@ use std::thread;
 
 use types::ReadingCollection;
 
-pub fn run_server(readings: ReadingCollection) {
-    let host = "0.0.0.0";
-    let port = "8080";
-
+pub fn run_server(listen_address: String, port: u16, readings: ReadingCollection) {
     let server = Server::new(move |request, mut response| {
         let request_path = request.uri().path();
         let request_path_parts = request_path.split('/').collect::<Vec<_>>();
@@ -31,6 +28,6 @@ pub fn run_server(readings: ReadingCollection) {
 
     thread::spawn(move || {
         println!("Starting http server: http://localhost:{}", port);
-        server.listen(host, port);
+        server.listen(&listen_address, &format!("{}", port));
     });
 }

@@ -8,29 +8,58 @@ use std::thread;
 use std::sync::mpsc::{channel};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::Duration;
 
 extern crate serde_json;
+extern crate toml;
 #[macro_use]
 extern crate serde_derive;
 
 extern crate simple_server;
 extern crate http;
 extern crate chrono;
+#[macro_use]
+extern crate error_chain;
 
 mod web;
 mod data_handler;
 mod types;
 mod dummy_data;
+mod logger;
+mod error;
+mod config;
 
 fn main() {
-    // Setting up thread-shared data
+    let config = config::read_config(&PathBuf::from("config.toml")).unwrap();
+
+    // Setting usin_providered data
     let reading_collection = Arc::new(Mutex::new(HashMap::new()));
     let (tx, rx) = channel();
 
-    dummy_data::sin_providier(tx.clone(), "temperature".into(), 20., 10.);
-    web::run_server(Arc::clone(&reading_collection));
-    data_handler::run_data_handler(rx, Arc::clone(&reading_collection));
-    let listener = TcpListener::bind("0.0.0.0:2000").unwrap();
+    logger::run_logger(
+            Duration::from_secs(60),
+            config.log_filename,
+            Arc::clone(&reading_collection)
+        );
+    dummy_data::sin_provider(
+            tx.clone(),
+            "temperature".into(),
+            20.,
+            10.
+        );
+    web::run_server(
+            config.http_address.clone(),
+            config.http_port,
+            Arc::clone(&reading_collection)
+        );
+    data_handler::run_data_handler(
+                rx,
+            Arc::clone(&reading_collection)
+        );
+
+
+    let listener = TcpListener::bind(&format!("{}:{}", config.tcp_address, config.tcp_port)).unwrap();
 
     println!("Listener started, waiting for connections on port 2000");
 
