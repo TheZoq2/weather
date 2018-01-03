@@ -11,7 +11,7 @@ pub fn run_server(readings: ReadingCollection) {
 
     let server = Server::new(move |request, mut response| {
         let request_path = request.uri().path();
-        let request_path_parts = request_path.split("/").collect::<Vec<_>>();
+        let request_path_parts = request_path.split('/').collect::<Vec<_>>();
 
         let request_response = match request_path_parts[1] {
             "data" => {
@@ -24,7 +24,7 @@ pub fn run_server(readings: ReadingCollection) {
             other => format!("unhandled uri: {}", other)
         };
 
-        response.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".as_bytes());
+        response.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
         //Ok(response.body(request_response.as_bytes())?)
         Ok(response.body(request_response.into_bytes())?)
     });
