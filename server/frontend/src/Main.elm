@@ -10,9 +10,10 @@ import Svg exposing (..)
 import Svg.Attributes exposing (..)
 
 import Graph
+import Time
 
 type alias Model =
-    { temperature: List Float
+    { temperature: List (Time, Float)
     }
 
 
@@ -22,7 +23,7 @@ init =
 
 
 type Msg
-    = TemperaturesReceived (Result Http.Error (List Float))
+    = TemperaturesReceived (Result Http.Error (List (Time, Float)))
     | Tick Time
 
 
@@ -42,11 +43,15 @@ update msg model =
             (model, sendTemperatureRequest)
 
 
-decodeTemperatures : Decode.Decoder (List Float)
+decodeTemperatures : Decode.Decoder (List (Time, Float))
 decodeTemperatures =
-    Decode.list Decode.float
+    let
+        timestampDecoder = Decode.field "timestamp" (Decode.map ((*) Time.second) Decode.float)
+        valueDecoder = Decode.field "value" Decode.float
+    in
+        Decode.list <| Decode.map2 (,) timestampDecoder valueDecoder
 
-getTemperatures : Http.Request (List Float)
+getTemperatures : Http.Request (List (Time, Float))
 getTemperatures =
     Http.get "http://localhost:8080/data/temperature" decodeTemperatures
 
@@ -81,7 +86,7 @@ view model =
             , height <| toString viewHeight ++ "px"
             ]
             [ Graph.drawHorizontalLines viewDimensions valueRange horizontalStep
-            , Graph.drawGraph viewDimensions valueRange model.temperature
+            , Graph.drawGraph viewDimensions valueRange (List.map Tuple.second model.temperature)
             ]
           ]
         ++ case List.head <| List.reverse model.temperature of
