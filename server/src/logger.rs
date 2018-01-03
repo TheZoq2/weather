@@ -2,7 +2,8 @@ use std::time::Duration;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::collections::hash_map::HashMap;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
+use std::io::prelude::*;
 use std::io::Write;
 
 use serde_json;
@@ -12,16 +13,19 @@ use types::{ReadingCollection, Datapoint};
 
 pub fn run_logger(interval: Duration, file: PathBuf, readings: ReadingCollection) {
     thread::spawn(move || {
-        println!("Saving data");
-        let readings = readings.lock().unwrap();
+        loop {
+            thread::sleep(interval);
+            {
+                println!("Saving data");
+                let readings = readings.lock().unwrap();
 
-        if let Err(e) = save_data(&file, &*readings) {
-            println!("Failed to log data {:?}", e);
-        };
+                if let Err(e) = save_data(&file, &*readings) {
+                    println!("Failed to log data {:?}", e);
+                };
 
-        println!("Data saved");
-
-        thread::sleep(interval);
+                println!("Data saved");
+            }
+        }
     });
 }
 
@@ -32,5 +36,13 @@ fn save_data(filename: &Path, readings: &HashMap<String, Vec<Datapoint>>) -> Res
     file.write_all(saved_string.as_bytes())?;
 
     Ok(())
+}
+
+pub fn load_data(filename: &Path) -> Result<HashMap<String, Vec<Datapoint>>> {
+    let mut file = File::open(filename)?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+
+    Ok(serde_json::from_str(&content)?)
 }
 

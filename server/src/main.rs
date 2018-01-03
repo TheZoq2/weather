@@ -33,8 +33,11 @@ mod config;
 fn main() {
     let config = config::read_config(&PathBuf::from("config.toml")).unwrap();
 
-    // Setting usin_providered data
-    let reading_collection = Arc::new(Mutex::new(HashMap::new()));
+    let reading_collection = Arc::new(Mutex::new(
+        logger::load_data(&config.log_filename).unwrap_or_else(|_| HashMap::new())
+    ));
+
+    //let reading_collection = Arc::new(Mutex::new(HashMap::new()));
     let (tx, rx) = channel();
 
     logger::run_logger(
@@ -54,7 +57,7 @@ fn main() {
             Arc::clone(&reading_collection)
         );
     data_handler::run_data_handler(
-                rx,
+            rx,
             Arc::clone(&reading_collection)
         );
 
