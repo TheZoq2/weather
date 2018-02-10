@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate scad_generator;
+extern crate scad_util;
 use scad_generator::*;
 
 
@@ -11,6 +12,8 @@ qstruct!(Anemometer() {
     arm_height: f32 = 3.,
     l_mount_length: f32 = 8.,
     hub_hole_diameter: f32 = 3.5,
+    hub_radius: f32 = 10.,
+    magnet_hole_offset: f32 = hub_radius/2.,
 });
 
 impl Anemometer {
@@ -59,7 +62,7 @@ impl Anemometer {
     }
 
     fn hub(&self) -> ScadObject {
-        let radius = 10.;
+        let radius = self.hub_radius;
         let height = self.l_mount_length + 2.;
         let arm_start_radius = 5.;
         let arm_hole_padding = 0.5;
@@ -102,7 +105,8 @@ impl Anemometer {
             let shape = scad!(Cylinder(magnet_thickness, Diameter(diameter)));
 
             let z_offset = height - magnet_thickness;
-            scad!(Translate(vec3(radius / 2., radius/2., z_offset)); shape)
+            let xy_offset = self.magnet_hole_offset;
+            scad!(Translate(vec3(xy_offset, xy_offset, z_offset)); shape)
         };
 
         scad!(Difference;
@@ -115,6 +119,51 @@ impl Anemometer {
                 magnet_hole
             })
         )
+    }
+
+    fn base(&self) -> ScadObject {
+        let padding = 0.5;
+        let thickness = 5.;
+        let sensor_top_offset = 0.5;
+        let nut_height = 2.5;
+        let nut_width = 5.5 + padding;
+
+        let hall_sensor_cutout = {
+            let sensor_size = vec3(4.0 + padding, 4., 1.5 + padding);
+            let wire_hole_length = 5.;
+
+            let sensor_hole = centered_cube(sensor_size, (true, true, false));
+            let wire_hole = {
+                let shape = centered_cube(
+                    sensor_size + vec3(0.,wire_hole_length,thickness),
+                    (true, false, false)
+                );
+                scad!(Translate(vec3(0., sensor_size.y/2., -thickness)); {
+                    shape
+                })
+            };
+
+            scad!(Translate(vec3(0., 0., -sensor_size.z)); {
+                sensor_hole,
+                wire_hole
+            })
+        };
+
+        let translated_hall_sensor = {
+            let xy = self.magnet_hole_offset;
+            scad!(Translate(vec3(xy, xy, thickness - sensor_top_offset)); {
+                hall_sensor_cutout
+            })
+        };
+
+        let body = scad!(Cylinder(thickness, Radius(20.)));
+        let screwhole = scad!(Cylinder(thickness, Diameter(self.hub_hole_diameter)));
+        scad!(Difference; {
+            body,
+            screwhole,
+            translated_hall_sensor,
+            scad_util::nut(nut_width, nut_height)
+        })
     }
 }
 
@@ -132,4 +181,5 @@ fn main() {
     let anemometer = Anemometer::new();
     save_file("arm.scad", anemometer.arm());
     save_file("hub.scad", anemometer.hub());
+    save_file("anemometer_base.scad", anemometer.base());
 }

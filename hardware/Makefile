@@ -1,4 +1,4 @@
-SOURCES=wifi.cpp messages.cpp
+SOURCES=src/wifi.cpp src/messages.cpp
 
 TEST_SOURCE=test.cpp
 

@@ -5,3 +5,4 @@ authors = ["TheZoq2 <frans.skarman@gmail.com>"]
 
 [dependencies]
 scad_generator = {git = "https://github.com/TheZoq2/Rust-Scad.git"}
+scad_util = {git = "https://github.com/TheZoq2/Rust-scad-util.git"}
