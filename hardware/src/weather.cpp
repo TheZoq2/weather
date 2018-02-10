@@ -11,13 +11,13 @@ const int ledPin = 13;
 
 //This is ugly but it fixes an undefined reference to an STD function. 
 //Perhaps something should be logged
-namespace std
-{
-    void __throw_bad_function_call()
-    {
-
-    }
-}
+// namespace std
+// {
+//     void __throw_bad_function_call()
+//     {
+// 
+//     }
+// }
 
 
 void setup()

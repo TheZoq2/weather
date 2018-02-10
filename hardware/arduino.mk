@@ -6,7 +6,7 @@ include ./paths.mk
 BOARD_TAG    = teensyLC
 ARDUINO_LIBS = 
 
-LOCAL_CPP_SRCS = src/messages.cpp src/wifi.cpp src/thermometer.cpp
+LOCAL_CPP_SRCS = src/weather.cpp src/messages.cpp src/wifi.cpp src/thermometer.cpp
 
 CXXFLAGS += -DIS_ARDUINO
 
