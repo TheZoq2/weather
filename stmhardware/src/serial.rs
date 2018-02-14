@@ -2,6 +2,7 @@ extern crate embedded_hal as hal;
 extern crate nb;
 
 use hal::prelude::*;
+use stm32f30x_hal::stm32f30x;
 
 #[derive(Debug)]
 pub enum Error<E> {
@@ -43,6 +44,12 @@ where
             Ok(()) => return Err(Error::TimedOut),
         }
     }
+}
+
+pub fn clear_isr(usart: stm32f30x::USART1) {
+    usart.icr.write(|w| {
+        w.orecf().set_bit()
+    })
 }
 
 pub fn write_all<S>(serial: &mut S, buffer: &[u8]) -> Result<(), S::Error>

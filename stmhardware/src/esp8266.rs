@@ -10,6 +10,7 @@ use serial;
 // Maximum length of an AT response (Length of message + CRLF
 const AT_RESPONSE_BUFFER_SIZE: usize = 13;
 
+#[derive(Debug)]
 pub enum ATResponse {
     Ok,
     Connect,
@@ -25,42 +26,70 @@ pub fn send_at_command<S>(serial: &mut S, command: &str) -> Result<(), S::Error>
 where
     S: hal::serial::Write<u8>
 {
-    serial::write_all(serial, "AT+".as_bytes())?;
+    serial::write_all(serial, "AT".as_bytes())?;
     serial::write_all(serial, command.as_bytes())?;
     serial::write_all(serial, "\r\n".as_bytes())?;
     Ok(())
 }
 
-/**
-  Tries to read an AT response from the serial port.
-
-  `timeout` is a function to get around borrowck
-*/
-pub fn read_at_response<T, S, F>(
-    serial: &mut S,
+pub fn wait_for_at_reply<S, T, F>(
+    rx: &mut S,
     timer: &mut T,
-    timeout: F
+    timeout: F,
 ) -> Result<ATResponse, serial::Error<S::Error>>
 where
-    T: hal::timer::CountDown,
     S: hal::serial::Read<u8>,
+    T: hal::timer::CountDown,
     F: Fn() -> T::Time
 {
-    let mut buffer = [0; AT_RESPONSE_BUFFER_SIZE];
+    // Setup a buffer to read the data into
+    let mut buffer = ATResponseBuffer::new();
 
-    loop {
-        let new_byte = serial::read_with_timeout(serial, timer, timeout())?;
+    // Read data until the serial port times out
+    let mut has_timed_out = false;
+    while !has_timed_out {
+        match serial::read_with_timeout(rx, timer, timeout()) {
+            Ok(byte) => {
+                buffer.push_byte(byte)
+            },
+            Err(serial::Error::TimedOut) => {
+                has_timed_out = true;
+                break;
+            }
+            Err(e) => {
+                Err(e)?
+            }
+        }
+    }
 
+    match buffer.parse() {
+        Some(response) => Ok(response),
+        None => Err(serial::Error::TimedOut)
+    }
+}
+
+
+pub struct ATResponseBuffer {
+    buffer: [u8; AT_RESPONSE_BUFFER_SIZE]
+}
+
+impl ATResponseBuffer {
+    pub fn new() -> Self {
+        Self {
+            buffer: [0; AT_RESPONSE_BUFFER_SIZE]
+        }
+    }
+
+    pub fn push_byte(&mut self, byte: u8) {
         // Shift the previous content one step
-        for i in 1..buffer.len() {
-            buffer[i] = buffer[i-1];
+        for i in 1..self.buffer.len() {
+            self.buffer[i] = self.buffer[i-1];
         }
-        buffer[0] = new_byte;
+        self.buffer[0] = byte;
+    }
 
-        let at_response = parse_at_response(&buffer);
-        if let Some(at_response) = at_response {
-            return Ok(at_response)
-        }
+    pub fn parse(&self) -> Option<ATResponse> {
+        parse_at_response(&self.buffer)
     }
 }
 
@@ -69,7 +98,7 @@ where
   Parses `buffer` as an AT command response returning the type if it
   is a valid AT response and `None` otherwise
 */
-fn parse_at_response(buffer: &[u8]) -> Option<ATResponse> {
+pub fn parse_at_response(buffer: &[u8]) -> Option<ATResponse> {
     if compare_buffers(buffer, "OK\r\n".as_bytes()) {
         Some(ATResponse::Ok)
     }

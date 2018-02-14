@@ -27,10 +27,11 @@ debug = true
 cortex-m = "0.3.0"
 cortex-m-rtfm = "0.3.1"
 f3 = "0.5.1"
-stm32f30x-hal = "0.1.2"
 nb = "0.1.1"
 embedded-hal = "0.1.1"
 
+# stm32f30x-hal = "0.1.2"
+stm32f30x-hal = {path = "../../stm32f30x-hal"}
 
 [dependencies.cortex-m-rt]
 version = "0.3.12"

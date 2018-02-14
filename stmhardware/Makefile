@@ -1,5 +1,9 @@
 unexport CARGO_INCREMENTAL
 
+all:
+	make build
+	make gdb
+
 build:
 	xargo build
 
