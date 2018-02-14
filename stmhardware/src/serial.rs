@@ -46,6 +46,47 @@ where
     }
 }
 
+/**
+  Reads bytes from the serial into `buffer`. The last if more than `buffer.len()` bytes
+  that are read, the last `buffer.len()` bytes are stoed.
+
+  Returns Ok(n) where n is the amount of bytes read into buffer
+*/
+pub fn read_until_timeout<S, T, T::Time>(
+    tx: &mut S,
+    timer: &mut T,
+    timeout: T::Time
+    buffer: &mut [u8]
+) -> Result<usize, Error<S::Error>>
+where
+    T: hal::timer::CountDown,
+    S: hal::serial::Read<u8>
+{
+    let mut ptr = 0;
+    let mut byte_amount = 0;
+    loop {
+        match serial::read_with_timeout(&mut rx, &mut timer, Hertz(1)) {
+            Ok(byte) => {
+                buffer[ptr] = byte;
+                ptr += 1;
+                ptr = ptr % buffer.len();
+                bytes_received = true;
+            },
+            Err(serial::Error::TimedOut) => {
+                if bytes_received {
+                    break;
+                }
+                else {
+                    continue;
+                }
+            },
+            Err(_e) => {
+                panic!()
+            }
+        };
+    }
+}
+
 pub fn clear_isr(usart: stm32f30x::USART1) {
     usart.icr.write(|w| {
         w.orecf().set_bit()

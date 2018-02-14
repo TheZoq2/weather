@@ -48,15 +48,47 @@ fn main() {
     );
     let (mut tx, mut rx) = serial.split();
 
-    // Disable echo to avoid having the serial be overrun
+    // // Disable echo to avoid having the serial be overrun
     esp8266::send_at_command(&mut tx, "E0");
-    timer.start(Hertz(1));
-    block!(timer.wait());
-    let _response = esp8266::wait_for_at_reply(&mut rx, &mut timer, || Hertz(1));
+    for i in 0..3 {
+        timer.start(Hertz(1));
+        block!(timer.wait());
+    }
+    let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
+    esp8266::send_at_command(&mut tx, "+GMR");
+    // let _response = esp8266::wait_for_at_reply(&mut rx, &mut timer, &|| Hertz(1));
+    // let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
+    // let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
+    // let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
 
-    esp8266::send_at_command(&mut tx, "+GMR").unwrap();
+    let mut buffer = [0; 8];
+    let mut ptr = 0;
+    let mut bytes_received = false;
+    loop {
+        match serial::read_with_timeout(&mut rx, &mut timer, Hertz(1)) {
+            Ok(byte) => {
+                buffer[ptr] = byte;
+                ptr += 1;
+                ptr = ptr % buffer.len();
+                bytes_received = true;
+            },
+            Err(serial::Error::TimedOut) => {
+                if bytes_received {
+                    break;
+                }
+                else {
+                    continue;
+                }
+            },
+            Err(_e) => {
+                panic!()
+            }
+        };
+    }
 
-    let response = esp8266::wait_for_at_reply(&mut rx, &mut timer, || Hertz(1));
+    // esp8266::send_at_command(&mut tx, "+GMR").unwrap();
+
+    // let response = esp8266::wait_for_at_reply(&mut rx, &mut timer, &|| Hertz(1));
 
     loop {
         rtfm::wfi();

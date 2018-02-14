@@ -35,7 +35,7 @@ where
 pub fn wait_for_at_reply<S, T, F>(
     rx: &mut S,
     timer: &mut T,
-    timeout: F,
+    timeout: &F,
 ) -> Result<ATResponse, serial::Error<S::Error>>
 where
     S: hal::serial::Read<u8>,
@@ -54,7 +54,6 @@ where
             },
             Err(serial::Error::TimedOut) => {
                 has_timed_out = true;
-                break;
             }
             Err(e) => {
                 Err(e)?
