@@ -8,18 +8,6 @@
 const int ledPin = 13;
 
 
-
-//This is ugly but it fixes an undefined reference to an STD function. 
-//Perhaps something should be logged
-// namespace std
-// {
-//     void __throw_bad_function_call()
-//     {
-// 
-//     }
-// }
-
-
 void setup()
 {
     // initialize the digital pin as an output.
@@ -30,7 +18,6 @@ void setup()
 
     Serial1.begin(115200);
 
-    digitalWrite(ledPin, HIGH);
 
     delay(5000);
     Serial.println("starting");
@@ -42,6 +29,7 @@ void setup()
 
     setup_wifi();
     setup_thermometer();
+    digitalWrite(ledPin, HIGH);
 }
 
 void loop()
@@ -53,6 +41,8 @@ void loop()
     send_data(message);
 
     delay(1000);
+
+    Serial.println("Loop");
 
     //send_data("yoloswag");
 }
