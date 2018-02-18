@@ -52,38 +52,58 @@ where
 
   Returns Ok(n) where n is the amount of bytes read into buffer
 */
-pub fn read_until_timeout<S, T, T::Time>(
-    tx: &mut S,
+pub fn read_until_timeout<S, T, F>(
+    rx: &mut S,
     timer: &mut T,
-    timeout: T::Time
-    buffer: &mut [u8]
+    timeout: &F,
+    buffer: &mut [u8],
 ) -> Result<usize, Error<S::Error>>
 where
     T: hal::timer::CountDown,
-    S: hal::serial::Read<u8>
+    S: hal::serial::Read<u8>,
+    F: Fn() -> T::Time,
 {
     let mut ptr = 0;
     let mut byte_amount = 0;
     loop {
-        match serial::read_with_timeout(&mut rx, &mut timer, Hertz(1)) {
+        match read_with_timeout(rx, timer, timeout()) {
             Ok(byte) => {
                 buffer[ptr] = byte;
-                ptr += 1;
-                ptr = ptr % buffer.len();
-                bytes_received = true;
+                ptr = (ptr+1) % buffer.len();
+                byte_amount += 1;
             },
-            Err(serial::Error::TimedOut) => {
-                if bytes_received {
+            Err(Error::TimedOut) => {
+                // If the remote end has already sent bytes and has now
+                // stopped, we assume the transmission has ended
+                if byte_amount != 0 {
                     break;
                 }
                 else {
                     continue;
                 }
             },
-            Err(_e) => {
-                panic!()
+            Err(e) => {
+                return Err(e)
             }
         };
+    }
+
+    if byte_amount >= buffer.len() {
+        uncircularize(buffer, ptr);
+        Ok(buffer.len())
+    }
+    else {
+        Ok(ptr)
+    }
+}
+
+fn uncircularize(buf: &mut [u8], offset: usize) {
+    for i in 0..offset {
+        let first = buf[0];
+        for n in 0..buf.len()-1 {
+            buf[n] = buf[n+1];
+        }
+        buf[buf.len()-1] = first;
     }
 }
 

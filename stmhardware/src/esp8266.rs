@@ -14,12 +14,8 @@ const AT_RESPONSE_BUFFER_SIZE: usize = 13;
 pub enum ATResponse {
     Ok,
     Connect,
-    Ring,
-    NoCarrier,
     Error,
-    NoDialtone,
     Busy,
-    NoAnswer
 }
 
 pub fn send_at_command<S>(serial: &mut S, command: &str) -> Result<(), S::Error> 
@@ -36,62 +32,23 @@ pub fn wait_for_at_reply<S, T, F>(
     rx: &mut S,
     timer: &mut T,
     timeout: &F,
-) -> Result<ATResponse, serial::Error<S::Error>>
+) -> Result<Option<ATResponse>, serial::Error<S::Error>>
 where
     S: hal::serial::Read<u8>,
     T: hal::timer::CountDown,
     F: Fn() -> T::Time
 {
-    // Setup a buffer to read the data into
-    let mut buffer = ATResponseBuffer::new();
+    let mut buffer = [0; AT_RESPONSE_BUFFER_SIZE];
+    let reply_length = serial::read_until_timeout(rx, timer, timeout, &mut buffer)?;
 
-    // Read data until the serial port times out
-    let mut has_timed_out = false;
-    while !has_timed_out {
-        match serial::read_with_timeout(rx, timer, timeout()) {
-            Ok(byte) => {
-                buffer.push_byte(byte)
-            },
-            Err(serial::Error::TimedOut) => {
-                has_timed_out = true;
-            }
-            Err(e) => {
-                Err(e)?
-            }
-        }
+    // Flip the buffer around to make it easer to find the last bytes of the message
+    let mut flipped_buffer = [0; AT_RESPONSE_BUFFER_SIZE];
+    for i in 0..buffer.len() {
+        flipped_buffer[buffer.len()-i-1] = buffer[i];
     }
 
-    match buffer.parse() {
-        Some(response) => Ok(response),
-        None => Err(serial::Error::TimedOut)
-    }
+    Ok(parse_at_response(&flipped_buffer))
 }
-
-
-pub struct ATResponseBuffer {
-    buffer: [u8; AT_RESPONSE_BUFFER_SIZE]
-}
-
-impl ATResponseBuffer {
-    pub fn new() -> Self {
-        Self {
-            buffer: [0; AT_RESPONSE_BUFFER_SIZE]
-        }
-    }
-
-    pub fn push_byte(&mut self, byte: u8) {
-        // Shift the previous content one step
-        for i in 1..self.buffer.len() {
-            self.buffer[i] = self.buffer[i-1];
-        }
-        self.buffer[0] = byte;
-    }
-
-    pub fn parse(&self) -> Option<ATResponse> {
-        parse_at_response(&self.buffer)
-    }
-}
-
 
 /**
   Parses `buffer` as an AT command response returning the type if it
@@ -104,23 +61,11 @@ pub fn parse_at_response(buffer: &[u8]) -> Option<ATResponse> {
     else if compare_buffers(buffer, "CONNECT\r\n".as_bytes()) {
         Some(ATResponse::Connect)
     }
-    else if compare_buffers(buffer, "RING\r\n".as_bytes()) {
-        Some(ATResponse::Ring)
-    }
-    else if compare_buffers(buffer, "NO CARRIER\r\n".as_bytes()) {
-        Some(ATResponse::NoCarrier)
-    }
     else if compare_buffers(buffer, "ERROR\r\n".as_bytes()) {
         Some(ATResponse::Error)
     }
-    else if compare_buffers(buffer, "NO DIALTONE\r\n".as_bytes()) {
-        Some(ATResponse::NoDialtone)
-    }
     else if compare_buffers(buffer, "BUSY\r\n".as_bytes()) {
         Some(ATResponse::Busy)
-    }
-    else if compare_buffers(buffer, "NO ANSWER\r\n".as_bytes()) {
-        Some(ATResponse::NoAnswer)
     }
     else {
         None
@@ -133,7 +78,7 @@ pub fn parse_at_response(buffer: &[u8]) -> Option<ATResponse> {
 */
 fn compare_buffers(buffer1: &[u8], buffer2: &[u8]) -> bool {
     for i in 0..min(buffer1.len(), buffer2.len()) {
-        if buffer1[i] != buffer2[i] {
+        if buffer1[i] != buffer2[buffer2.len()-1-i] {
             return false;
         }
     }

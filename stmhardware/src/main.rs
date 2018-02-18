@@ -61,30 +61,9 @@ fn main() {
     // let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
     // let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
 
-    let mut buffer = [0; 8];
-    let mut ptr = 0;
-    let mut bytes_received = false;
-    loop {
-        match serial::read_with_timeout(&mut rx, &mut timer, Hertz(1)) {
-            Ok(byte) => {
-                buffer[ptr] = byte;
-                ptr += 1;
-                ptr = ptr % buffer.len();
-                bytes_received = true;
-            },
-            Err(serial::Error::TimedOut) => {
-                if bytes_received {
-                    break;
-                }
-                else {
-                    continue;
-                }
-            },
-            Err(_e) => {
-                panic!()
-            }
-        };
-    }
+    // let mut buffer = [0; 8];
+    //let byte_amount = serial::read_until_timeout(&mut rx, &mut timer, &||Hertz(1), &mut buffer);
+    let response = esp8266::wait_for_at_reply(&mut rx, &mut timer, &|| Hertz(1));
 
     // esp8266::send_at_command(&mut tx, "+GMR").unwrap();
 
