@@ -13,7 +13,6 @@ const AT_RESPONSE_BUFFER_SIZE: usize = 13;
 #[derive(Debug)]
 pub enum ATResponse {
     Ok,
-    Connect,
     Error,
     Busy,
 }
@@ -32,39 +31,34 @@ pub fn wait_for_at_reply<S, T, F>(
     rx: &mut S,
     timer: &mut T,
     timeout: &F,
-) -> Result<Option<ATResponse>, serial::Error<S::Error>>
+) -> Result<ATResponse, serial::Error<S::Error>>
 where
     S: hal::serial::Read<u8>,
     T: hal::timer::CountDown,
     F: Fn() -> T::Time
 {
     let mut buffer = [0; AT_RESPONSE_BUFFER_SIZE];
-    let reply_length = serial::read_until_timeout(rx, timer, timeout, &mut buffer)?;
-
-    // Flip the buffer around to make it easer to find the last bytes of the message
-    let mut flipped_buffer = [0; AT_RESPONSE_BUFFER_SIZE];
-    for i in 0..buffer.len() {
-        flipped_buffer[buffer.len()-i-1] = buffer[i];
-    }
-
-    Ok(parse_at_response(&flipped_buffer))
+    serial::read_until_message(
+        rx,
+        timer,
+        timeout,
+        &mut buffer,
+        &parse_at_response
+    )
 }
 
 /**
   Parses `buffer` as an AT command response returning the type if it
   is a valid AT response and `None` otherwise
 */
-pub fn parse_at_response(buffer: &[u8]) -> Option<ATResponse> {
-    if compare_buffers(buffer, "OK\r\n".as_bytes()) {
+pub fn parse_at_response(buffer: &[u8], offset: usize) -> Option<ATResponse> {
+    if compare_circular_buffer(buffer, offset, "OK\r\n".as_bytes()) {
         Some(ATResponse::Ok)
     }
-    else if compare_buffers(buffer, "CONNECT\r\n".as_bytes()) {
-        Some(ATResponse::Connect)
-    }
-    else if compare_buffers(buffer, "ERROR\r\n".as_bytes()) {
+    else if compare_circular_buffer(buffer, offset, "ERROR\r\n".as_bytes()) {
         Some(ATResponse::Error)
     }
-    else if compare_buffers(buffer, "BUSY\r\n".as_bytes()) {
+    else if compare_circular_buffer(buffer, offset, "BUSY\r\n".as_bytes()) {
         Some(ATResponse::Busy)
     }
     else {
@@ -73,14 +67,32 @@ pub fn parse_at_response(buffer: &[u8]) -> Option<ATResponse> {
 }
 
 /**
-  Compares the content of the two specified buffers. If the first `n` bytes
-  match, true is returned. `n` is the minimum length of the two buffers.
+  Compares the content of a circular buffer with another buffer. The comparison
+  is done 'from the back' and if one buffer is longer than the other, only the
+  content of the shared bytes is compared.
+
+  `offset` is the index of the first byte of the circular buffer
+  ```
+  [4,5,0,1,2,3]
+       ^- offset
+  ```
 */
-fn compare_buffers(buffer1: &[u8], buffer2: &[u8]) -> bool {
-    for i in 0..min(buffer1.len(), buffer2.len()) {
-        if buffer1[i] != buffer2[buffer2.len()-1-i] {
+pub fn compare_circular_buffer(
+    circular_buffer: &[u8],
+    offset: usize,
+    comparison: &[u8]
+) -> bool
+{
+    let comparison_length = min(circular_buffer.len(), comparison.len());
+    for i in 0..comparison_length {
+        // Addition of circular_buffer.len() because % is remainder, not mathematical modulo
+        // https://stackoverflow.com/questions/31210357/is-there-a-modulus-not-remainder-function-operation/31210691
+        let circular_index = (circular_buffer.len() + offset - 1 - i) % circular_buffer.len();
+        let comparison_index = comparison.len() - 1 - i;
+        if circular_buffer[circular_index] != comparison[comparison_index] {
             return false;
         }
     }
-    return true;
+    true
 }
+

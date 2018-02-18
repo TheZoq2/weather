@@ -55,19 +55,10 @@ fn main() {
         block!(timer.wait());
     }
     let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
-    esp8266::send_at_command(&mut tx, "+GMR");
-    // let _response = esp8266::wait_for_at_reply(&mut rx, &mut timer, &|| Hertz(1));
-    // let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
-    // let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
-    // let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
 
-    // let mut buffer = [0; 8];
-    //let byte_amount = serial::read_until_timeout(&mut rx, &mut timer, &||Hertz(1), &mut buffer);
+    esp8266::send_at_command(&mut tx, "+GMR");
     let response = esp8266::wait_for_at_reply(&mut rx, &mut timer, &|| Hertz(1));
 
-    // esp8266::send_at_command(&mut tx, "+GMR").unwrap();
-
-    // let response = esp8266::wait_for_at_reply(&mut rx, &mut timer, &|| Hertz(1));
 
     loop {
         rtfm::wfi();

@@ -47,21 +47,19 @@ where
 }
 
 /**
-  Reads bytes from the serial into `buffer`. The last if more than `buffer.len()` bytes
-  that are read, the last `buffer.len()` bytes are stoed.
-
-  Returns Ok(n) where n is the amount of bytes read into buffer
 */
-pub fn read_until_timeout<S, T, F>(
+pub fn read_until_message<S, T, F, C, R>(
     rx: &mut S,
     timer: &mut T,
     timeout: &F,
     buffer: &mut [u8],
-) -> Result<usize, Error<S::Error>>
+    parser: &C
+) -> Result<R, Error<S::Error>>
 where
     T: hal::timer::CountDown,
     S: hal::serial::Read<u8>,
     F: Fn() -> T::Time,
+    C: Fn(&[u8], usize) -> Option<R>
 {
     let mut ptr = 0;
     let mut byte_amount = 0;
@@ -71,12 +69,16 @@ where
                 buffer[ptr] = byte;
                 ptr = (ptr+1) % buffer.len();
                 byte_amount += 1;
+
+                if let Some(val) = parser(buffer, ptr) {
+                    return Ok(val);
+                }
             },
             Err(Error::TimedOut) => {
                 // If the remote end has already sent bytes and has now
                 // stopped, we assume the transmission has ended
                 if byte_amount != 0 {
-                    break;
+                    return Err(Error::TimedOut);
                 }
                 else {
                     continue;
@@ -87,30 +89,6 @@ where
             }
         };
     }
-
-    if byte_amount >= buffer.len() {
-        uncircularize(buffer, ptr);
-        Ok(buffer.len())
-    }
-    else {
-        Ok(ptr)
-    }
-}
-
-fn uncircularize(buf: &mut [u8], offset: usize) {
-    for i in 0..offset {
-        let first = buf[0];
-        for n in 0..buf.len()-1 {
-            buf[n] = buf[n+1];
-        }
-        buf[buf.len()-1] = first;
-    }
-}
-
-pub fn clear_isr(usart: stm32f30x::USART1) {
-    usart.icr.write(|w| {
-        w.orecf().set_bit()
-    })
 }
 
 pub fn write_all<S>(serial: &mut S, buffer: &[u8]) -> Result<(), S::Error>
