@@ -1,8 +1,7 @@
 extern crate embedded_hal as hal;
 extern crate nb;
 
-use hal::prelude::*;
-use stm32f30x_hal::stm32f30x;
+// use hal::prelude::*;
 
 #[derive(Debug)]
 pub enum Error<E> {

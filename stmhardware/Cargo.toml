@@ -44,3 +44,7 @@ version = "0.2.0"
 version = "0.6.0"
 features = ["rt"]
 
+[dependencies.arrayvec]
+version = "0.4.7"
+features = []
+default-features = false

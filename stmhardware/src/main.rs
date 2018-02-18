@@ -14,9 +14,10 @@ extern crate cortex_m_semihosting;
 
 extern crate embedded_hal as hal;
 extern crate stm32f30x_hal;
+extern crate arrayvec;
 
 use stm32f30x_hal::prelude::*;
-use stm32f30x_hal::serial::{Event, Serial};
+use stm32f30x_hal::serial::{Serial};
 use stm32f30x_hal::stm32f30x::{self};
 use stm32f30x_hal::time::Hertz;
 use stm32f30x_hal::timer::Timer;
@@ -37,7 +38,7 @@ fn main() {
     let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
     let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
 
-    let mut timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
+    let timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
 
     let serial = Serial::usart1(
         p.USART1,
@@ -46,18 +47,11 @@ fn main() {
         clocks,
         &mut rcc.apb2,
     );
-    let (mut tx, mut rx) = serial.split();
+    let (tx, rx) = serial.split();
 
-    // // Disable echo to avoid having the serial be overrun
-    esp8266::send_at_command(&mut tx, "E0");
-    for i in 0..3 {
-        timer.start(Hertz(1));
-        block!(timer.wait());
-    }
-    let byte = serial::read_with_timeout(&mut rx, &mut timer, Hertz(1));
+    let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, ||Hertz(1)).unwrap();
 
-    esp8266::send_at_command(&mut tx, "+GMR");
-    let response = esp8266::wait_for_at_reply(&mut rx, &mut timer, &|| Hertz(1));
+    esp8266.communicate("+CWJAP?").unwrap();
 
 
     loop {

@@ -1,8 +1,10 @@
 extern crate embedded_hal as hal;
 extern crate nb;
 use core::cmp::min;
+use core::fmt::{self, Write};
+use arrayvec::ArrayString;
 
-use hal::prelude::*;
+// use hal::prelude::*;
 
 
 use serial;
@@ -17,34 +19,198 @@ pub enum ATResponse {
     Busy,
 }
 
-pub fn send_at_command<S>(serial: &mut S, command: &str) -> Result<(), S::Error> 
-where
-    S: hal::serial::Write<u8>
-{
-    serial::write_all(serial, "AT".as_bytes())?;
-    serial::write_all(serial, command.as_bytes())?;
-    serial::write_all(serial, "\r\n".as_bytes())?;
-    Ok(())
+#[derive(Debug)]
+pub enum Error<R, T> {
+    TxError(T),
+    RxError(R),
+    UnexpectedResponse(ATResponse),
+    Fmt(fmt::Error)
 }
 
-pub fn wait_for_at_reply<S, T, F>(
-    rx: &mut S,
-    timer: &mut T,
-    timeout: &F,
-) -> Result<ATResponse, serial::Error<S::Error>>
-where
-    S: hal::serial::Read<u8>,
-    T: hal::timer::CountDown,
-    F: Fn() -> T::Time
+impl<R,T> From<fmt::Error> for Error<R,T>{
+    fn from(other: fmt::Error) -> Error<R,T> {
+        Error::Fmt(other)
+    }
+}
+
+pub enum ConnectionType {
+    Tcp,
+    Udp
+}
+impl ConnectionType {
+    pub fn as_str(&self) -> &str {
+        match *self {
+            ConnectionType::Tcp => "TCP",
+            ConnectionType::Udp => "UDP"
+        }
+    }
+}
+
+
+macro_rules! return_type {
+    ($ok:ty) => {
+        Result<$ok, Error<serial::Error<Rx::Error>, Tx::Error>>
+    }
+}
+
+/**
+  Struct for interracting with an esp8266 wifi module over USART
+*/
+pub struct Esp8266<Tx, Rx, Timer, Timeout>
+where Tx: hal::serial::Write<u8>,
+      Rx: hal::serial::Read<u8>,
+      Timer: hal::timer::CountDown,
+      Timeout: Fn() -> Timer::Time
 {
-    let mut buffer = [0; AT_RESPONSE_BUFFER_SIZE];
-    serial::read_until_message(
-        rx,
-        timer,
-        timeout,
-        &mut buffer,
-        &parse_at_response
-    )
+    tx: Tx,
+    rx: Rx,
+    timer: Timer,
+    timeout: Timeout
+}
+
+impl<Tx, Rx, Timer, Timeout> Esp8266<Tx, Rx, Timer, Timeout>
+where Tx: hal::serial::Write<u8>,
+      Rx: hal::serial::Read<u8>,
+      Timer: hal::timer::CountDown,
+      Timeout: Fn() -> Timer::Time
+{
+    pub fn new(tx: Tx, rx: Rx, timer: Timer, timeout: Timeout) -> return_type!(Self)
+    {
+        let mut result = Self {tx, rx, timer, timeout};
+
+        // Turn off echo on the device and wait for it to process that command
+        result.send_at_command("E0")?;
+
+        for _ in 0..3 {
+            result.timer.start((result.timeout)());
+            block!(result.timer.wait()).unwrap();
+        }
+        // Read a byte, ignore the result. This is done to clear the buffer
+        let _byte = result.wait_for_ok();
+
+        Ok(result)
+    }
+
+    /**
+      Sends `AT${command}` to the device and waits for it to reply
+    */
+    pub fn communicate(&mut self, command: &str) -> return_type!(())
+    {
+        self.send_at_command(command)?;
+        self.wait_for_ok()
+    }
+
+    pub fn send_data(
+        &mut self,
+        connection_type: ConnectionType,
+        address: &[u8],
+        port: &[u8],
+        data: &[u8]
+    ) -> return_type!(())
+    {
+        // Send a start connection message
+        self.start_tcp_connection(connection_type, address, port)?;
+
+        self.wait_for_ok()?;
+        self.start_transmission(data.len())?;
+        //wait_for_prompt()
+        unimplemented!("Send data");
+        unimplemented!("Close connection");
+    }
+
+    fn start_tcp_connection (
+        &mut self,
+        connection_type: ConnectionType,
+        address: &[u8],
+        port: &[u8]
+    ) -> return_type!(())
+    {
+        self.send_raw("AT+CIPSTART=\"".as_bytes())?;
+        self.send_raw(connection_type.as_str().as_bytes())?;
+        self.send_raw("\",\"".as_bytes())?;
+        self.send_raw(address)?;
+        self.send_raw("\",".as_bytes())?;
+        self.send_raw(port)?;
+        self.send_raw("\r\n".as_bytes())?;
+        Ok(())
+    }
+
+    fn start_transmission(&mut self, message_length: usize) -> return_type!(())
+    {
+        // You can only send 2048 bytes per packet 
+        assert!(message_length < 2048);
+        let mut length_buffer = ArrayString::<[_; 4]>::new();
+        write!(&mut length_buffer, "{}", message_length)?;
+
+        self.send_raw(b"AT+CIPSEND=")?;
+        self.send_raw(length_buffer.as_bytes())?;
+        self.send_raw(b"\r\n")?;
+        Ok(())
+    }
+
+    /**
+      Sends the "AT${command}" to the device
+    */
+    fn send_at_command(&mut self, command: &str) -> return_type!(())
+    {
+        self.send_raw(b"AT")?;
+        self.send_raw(command.as_bytes())?;
+        self.send_raw(b"\r\n")?;
+        Ok(())
+    }
+
+    fn wait_for_ok(&mut self) -> return_type!(()) {
+        let mut buffer = [0; AT_RESPONSE_BUFFER_SIZE];
+        let response = serial::read_until_message(
+            &mut self.rx,
+            &mut self.timer,
+            &self.timeout,
+            &mut buffer,
+            &parse_at_response
+        );
+
+        match response {
+            Ok(ATResponse::Ok) => {
+                Ok(())
+            },
+            Ok(other) => {
+                Err(Error::UnexpectedResponse(other))
+            }
+            Err(e) => {
+                Err(Error::RxError(e))
+            }
+        }
+    }
+
+    fn wait_for_prompt(&mut self) -> return_type!(()) {
+        let mut buffer = [0; 1];
+        let result = serial::read_until_message(
+            &mut self.rx,
+            &mut self.timer,
+            &self.timeout,
+            &mut buffer,
+            &|buf, _| {
+                if buf[0] == '>' as u8 {
+                    Some(())
+                }
+                else {
+                    None
+                }
+            }
+        );
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(Error::RxError(e))
+        }
+    }
+
+    fn send_raw(&mut self, bytes: &[u8]) -> return_type!(())
+    {
+        match serial::write_all(&mut self.tx, bytes) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(Error::TxError(e))
+        }
+    }
 }
 
 /**
