@@ -27,6 +27,29 @@ pub enum Error<R, T> {
     Fmt(fmt::Error)
 }
 
+pub enum TransmissionStep {
+    Connect,
+    Send,
+    Close
+}
+pub struct TransmissionError<R, T> {
+    step: TransmissionStep,
+    cause: Error<R, T>
+}
+
+impl<R, T> TransmissionError<R, T> {
+    pub fn try<RetType>(step: TransmissionStep, cause: Result<RetType, Error<R, T>>) 
+        -> Result<RetType, Self>
+    {
+        cause.map_err(|e| {
+            Self {
+                step,
+                cause: e
+            }
+        })
+    }
+}
+
 impl<R,T> From<fmt::Error> for Error<R,T>{
     fn from(other: fmt::Error) -> Error<R,T> {
         Error::Fmt(other)
@@ -50,6 +73,12 @@ impl ConnectionType {
 macro_rules! return_type {
     ($ok:ty) => {
         Result<$ok, Error<serial::Error<Rx::Error>, Tx::Error>>
+    }
+}
+
+macro_rules! transmission_return_type {
+    ($ok:ty) => {
+        Result<$ok, TransmissionError<serial::Error<Rx::Error>, Tx::Error>>
     }
 }
 
@@ -107,17 +136,27 @@ where Tx: hal::serial::Write<u8>,
         address: &str,
         port: u16,
         data: &str
-    ) -> return_type!(())
+    ) -> transmission_return_type!(())
     {
         // Send a start connection message
-        self.start_tcp_connection(connection_type, address, port)?;
+        let tcp_start_result = self.start_tcp_connection(connection_type, address, port);
+        TransmissionError::try( TransmissionStep::Connect, tcp_start_result)?;
+        TransmissionError::try(TransmissionStep::Connect, self.wait_for_ok())?;
 
-        self.wait_for_ok()?;
+        TransmissionError::try(TransmissionStep::Send, self.transmit_data(data))?;
+
+        TransmissionError::try(TransmissionStep::Close, self.close_connection())
+    }
+
+    pub fn close_connection(&mut self) -> return_type!(()) {
+        self.send_at_command("+CIPCLOSE")?;
+        self.wait_for_ok()
+    }
+
+    fn transmit_data(&mut self, data: &str) -> return_type!(()) {
         self.start_transmission(data.len())?;
         self.wait_for_prompt()?;
         self.send_raw(data.as_bytes())?;
-        self.wait_for_ok()?;
-        self.send_at_command("+CIPCLOSE")?;
         self.wait_for_ok()
     }
 
@@ -143,8 +182,7 @@ where Tx: hal::serial::Write<u8>,
         Ok(())
     }
 
-    fn start_transmission(&mut self, message_length: usize) -> return_type!(())
-    {
+    fn start_transmission(&mut self, message_length: usize) -> return_type!(()) {
         // You can only send 2048 bytes per packet 
         assert!(message_length < 2048);
         let mut length_buffer = ArrayString::<[_; 4]>::new();
@@ -159,8 +197,7 @@ where Tx: hal::serial::Write<u8>,
     /**
       Sends the "AT${command}" to the device
     */
-    fn send_at_command(&mut self, command: &str) -> return_type!(())
-    {
+    fn send_at_command(&mut self, command: &str) -> return_type!(()) {
         self.send_raw(b"AT")?;
         self.send_raw(command.as_bytes())?;
         self.send_raw(b"\r\n")?;
@@ -212,8 +249,7 @@ where Tx: hal::serial::Write<u8>,
         }
     }
 
-    fn send_raw(&mut self, bytes: &[u8]) -> return_type!(())
-    {
+    fn send_raw(&mut self, bytes: &[u8]) -> return_type!(()) {
         match serial::write_all(&mut self.tx, bytes) {
             Ok(_) => Ok(()),
             Err(e) => Err(Error::TxError(e))

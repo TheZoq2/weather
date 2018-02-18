@@ -54,8 +54,13 @@ fn main() {
 
     esp8266.communicate("+CWJAP?").unwrap();
 
-    esp8266.send_data(esp8266::ConnectionType::Tcp, "192.168.1.5", 2000, "temperature:5")
-        .unwrap();
+    match esp8266.send_data(esp8266::ConnectionType::Tcp, "192.168.1.5", 2000, "temperature:500") {
+        Ok(val) => {},
+        Err(e) => {
+            esp8266.close_connection().unwrap();
+            panic!();
+        }
+    }
 
 
     loop {
