@@ -1,6 +1,7 @@
 #![feature(proc_macro)]
 #![no_std]
 #![allow(dead_code)]
+#![feature(generic_associated_types)]
 
 extern crate f3;
 #[macro_use(block)]
@@ -52,6 +53,9 @@ fn main() {
     let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, ||Hertz(1)).unwrap();
 
     esp8266.communicate("+CWJAP?").unwrap();
+
+    esp8266.send_data(esp8266::ConnectionType::Tcp, "192.168.1.5", 2000, "temperature:5")
+        .unwrap();
 
 
     loop {

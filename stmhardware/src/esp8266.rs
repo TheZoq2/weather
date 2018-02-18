@@ -74,6 +74,7 @@ where Tx: hal::serial::Write<u8>,
       Timer: hal::timer::CountDown,
       Timeout: Fn() -> Timer::Time
 {
+
     pub fn new(tx: Tx, rx: Rx, timer: Timer, timeout: Timeout) -> return_type!(Self)
     {
         let mut result = Self {tx, rx, timer, timeout};
@@ -103,9 +104,9 @@ where Tx: hal::serial::Write<u8>,
     pub fn send_data(
         &mut self,
         connection_type: ConnectionType,
-        address: &[u8],
-        port: &[u8],
-        data: &[u8]
+        address: &str,
+        port: u16,
+        data: &str
     ) -> return_type!(())
     {
         // Send a start connection message
@@ -113,24 +114,31 @@ where Tx: hal::serial::Write<u8>,
 
         self.wait_for_ok()?;
         self.start_transmission(data.len())?;
-        //wait_for_prompt()
-        unimplemented!("Send data");
-        unimplemented!("Close connection");
+        self.wait_for_prompt()?;
+        self.send_raw(data.as_bytes())?;
+        self.wait_for_ok()?;
+        self.send_at_command("+CIPCLOSE")?;
+        self.wait_for_ok()
     }
 
     fn start_tcp_connection (
         &mut self,
         connection_type: ConnectionType,
-        address: &[u8],
-        port: &[u8]
+        address: &str,
+        port: u16
     ) -> return_type!(())
     {
+        // Length of biggest u16:
+        const PORT_STRING_LENGTH: usize = 5;
+        let mut port_str = ArrayString::<[_;PORT_STRING_LENGTH]>::new();
+        write!(&mut port_str, "{}", port)?;
+
         self.send_raw("AT+CIPSTART=\"".as_bytes())?;
         self.send_raw(connection_type.as_str().as_bytes())?;
         self.send_raw("\",\"".as_bytes())?;
-        self.send_raw(address)?;
+        self.send_raw(address.as_bytes())?;
         self.send_raw("\",".as_bytes())?;
-        self.send_raw(port)?;
+        self.send_raw(port_str.as_bytes())?;
         self.send_raw("\r\n".as_bytes())?;
         Ok(())
     }
