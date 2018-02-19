@@ -14,11 +14,13 @@ pub fn read_with_timeout<S, T>(
     serial: &mut S,
     timer: &mut T,
     timeout: T::Time,
+    timeout_multiplyer: u8
 ) -> Result<u8, Error<S::Error>>
 where
     T: hal::timer::CountDown,
     S: hal::serial::Read<u8>,
 {
+    let mut timeout_remaining = timeout_multiplyer;
     timer.start(timeout);
 
     loop {
@@ -40,7 +42,12 @@ where
             },
             // no timeout yet, try again
             Err(nb::Error::WouldBlock) => continue,
-            Ok(()) => return Err(Error::TimedOut),
+            Ok(()) => {
+                if timeout_remaining == 1 {
+                    return Err(Error::TimedOut);
+                }
+                timeout_remaining -= 1;
+            }
         }
     }
 }
@@ -57,13 +64,14 @@ pub fn read_until_message<S, T, F, C, R>(
 where
     T: hal::timer::CountDown,
     S: hal::serial::Read<u8>,
-    F: Fn() -> T::Time,
+    F: Fn() -> (T::Time, u8),
     C: Fn(&[u8], usize) -> Option<R>
 {
     let mut ptr = 0;
     let mut byte_amount = 0;
     loop {
-        match read_with_timeout(rx, timer, timeout()) {
+        let (timeout, multiplyer) = timeout();
+        match read_with_timeout(rx, timer, timeout, multiplyer) {
             Ok(byte) => {
                 buffer[ptr] = byte;
                 ptr = (ptr+1) % buffer.len();

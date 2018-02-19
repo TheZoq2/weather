@@ -10,7 +10,7 @@ pub fn sin_provider(tx: Sender<(String, f32)>, name: String, amplitude: f32, bia
             tx.send((name.clone(), t.sin() * amplitude + bias)).unwrap();
 
             t += 0.3;
-            thread::sleep(::std::time::Duration::new(1,0));
+            thread::sleep(::std::time::Duration::new(10,0));
         }
     });
 }

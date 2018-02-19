@@ -89,7 +89,7 @@ pub struct Esp8266<Tx, Rx, Timer, Timeout>
 where Tx: hal::serial::Write<u8>,
       Rx: hal::serial::Read<u8>,
       Timer: hal::timer::CountDown,
-      Timeout: Fn() -> Timer::Time
+      Timeout: Fn() -> (Timer::Time, u8)
 {
     tx: Tx,
     rx: Rx,
@@ -101,7 +101,7 @@ impl<Tx, Rx, Timer, Timeout> Esp8266<Tx, Rx, Timer, Timeout>
 where Tx: hal::serial::Write<u8>,
       Rx: hal::serial::Read<u8>,
       Timer: hal::timer::CountDown,
-      Timeout: Fn() -> Timer::Time
+      Timeout: Fn() -> (Timer::Time, u8)
 {
 
     pub fn new(tx: Tx, rx: Rx, timer: Timer, timeout: Timeout) -> return_type!(Self)
@@ -112,7 +112,7 @@ where Tx: hal::serial::Write<u8>,
         result.send_at_command("E0")?;
 
         for _ in 0..3 {
-            result.timer.start((result.timeout)());
+            result.timer.start((result.timeout)().0);
             block!(result.timer.wait()).unwrap();
         }
         // Read a byte, ignore the result. This is done to clear the buffer
@@ -141,7 +141,6 @@ where Tx: hal::serial::Write<u8>,
         // Send a start connection message
         let tcp_start_result = self.start_tcp_connection(connection_type, address, port);
         TransmissionError::try( TransmissionStep::Connect, tcp_start_result)?;
-        TransmissionError::try(TransmissionStep::Connect, self.wait_for_ok())?;
 
         TransmissionError::try(TransmissionStep::Send, self.transmit_data(data))?;
 
@@ -179,7 +178,7 @@ where Tx: hal::serial::Write<u8>,
         self.send_raw("\",".as_bytes())?;
         self.send_raw(port_str.as_bytes())?;
         self.send_raw("\r\n".as_bytes())?;
-        Ok(())
+        self.wait_for_ok()
     }
 
     fn start_transmission(&mut self, message_length: usize) -> return_type!(()) {
