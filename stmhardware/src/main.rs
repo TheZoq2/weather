@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![feature(generic_associated_types)]
 
-extern crate f3;
+// extern crate f3;
 #[macro_use(block)]
 extern crate nb;
 
@@ -14,36 +14,41 @@ extern crate cortex_m_rtfm as rtfm;
 extern crate cortex_m_semihosting;
 
 extern crate embedded_hal as hal;
-extern crate stm32f30x_hal;
+//extern crate stm32f30x_hal;
+extern crate stm32f103xx_hal;
+extern crate stm32f103xx;
 extern crate arrayvec;
 
-use stm32f30x_hal::prelude::*;
-use stm32f30x_hal::serial::{Serial};
-use stm32f30x_hal::stm32f30x::{self};
-use stm32f30x_hal::time::Hertz;
-use stm32f30x_hal::timer::Timer;
+
+use stm32f103xx_hal::prelude::*;
+use stm32f103xx_hal::serial::{Serial};
+//use stm32f103xx_hal::stm32f103xx::{self};
+use stm32f103xx_hal::time::Hertz;
+use stm32f103xx_hal::timer::Timer;
 
 mod serial;
 mod esp8266;
 
 
 fn main() {
-    let p = stm32f30x::Peripherals::take().unwrap();
+    let p = stm32f103xx::Peripherals::take().unwrap();
 
     let mut flash = p.FLASH.constrain();
     let mut rcc = p.RCC.constrain();
-    let mut gpioa = p.GPIOA.split(&mut rcc.ahb);
+    let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
+    let mut afio = p.AFIO.constrain(&mut rcc.apb2);
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
-    let tx = gpioa.pa9.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
-    let rx = gpioa.pa10.into_af7(&mut gpioa.moder, &mut gpioa.afrh);
+    let tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
+    let rx = gpioa.pa10.into_floating_input(&mut gpioa.crh);
 
     let timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
 
     let serial = Serial::usart1(
         p.USART1,
         (tx, rx),
+        &mut afio.mapr,
         9600.bps(),
         clocks,
         &mut rcc.apb2,
