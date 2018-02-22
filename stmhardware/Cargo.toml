@@ -50,7 +50,8 @@ features = []
 default-features = false
 
 [dependencies.stm32f103xx-hal]
-git = "https://github.com/japaric/stm32f103xx-hal.git"
+# git = "https://github.com/japaric/stm32f103xx-hal.git"
+path = "../../stm32f103xx-hal"
 
 [dependencies.stm32f103xx]
 version = "0.8.0"
