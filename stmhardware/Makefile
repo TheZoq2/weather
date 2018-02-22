@@ -13,6 +13,8 @@ openocd:
 	openocd -f interface/stlink-v2-1.cfg -f target/stm32f3x.cfg
 
 blue_openocd:
+	# openocd -f interface/stlink-v2.cfg -f target/stm32f1x.cfg
+	# openocd -f interface/stlink-v2.cfg -f target/stm32f1x.cfg -f bluepill.cfg
 	openocd -f bluepill.cfg
 
 gdb:

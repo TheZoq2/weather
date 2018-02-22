@@ -55,19 +55,19 @@ fn main() {
     );
     let (tx, rx) = serial.split();
 
-    let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, || (Hertz(1), 3)).unwrap();
+    // let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, || (Hertz(1), 3)).unwrap();
 
-    esp8266.communicate("+CWJAP?").unwrap();
+    // esp8266.communicate("+CWJAP?").unwrap();
 
-    loop {
-        match esp8266.send_data(esp8266::ConnectionType::Tcp, "192.168.1.5", 2000, "temperature:500") {
-            Ok(val) => {},
-            Err(e) => {
-                esp8266.close_connection().unwrap();
-                panic!();
-            }
-        }
-    }
+    // loop {
+    //     match esp8266.send_data(esp8266::ConnectionType::Tcp, "192.168.1.5", 2000, "temperature:500") {
+    //         Ok(val) => {},
+    //         Err(e) => {
+    //             esp8266.close_connection().unwrap();
+    //             panic!();
+    //         }
+    //     }
+    // }
 
 
     loop {

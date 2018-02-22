@@ -19,5 +19,6 @@ monitor arm semihosting enable
 # # enable ITM port 0
 # monitor itm port 0 on
 
-load
+# load elf-image
+load target/thumbv7em-none-eabi/debug/cortex-m-quickstart
 # step
