@@ -2,14 +2,14 @@ use arrayvec::ArrayString;
 
 use core::fmt::Write;
 
-const MESSAGE_MAX_LEN: usize = 16; // Chosen arbitrarily
+const MESSAGE_MAX_LEN: usize = 32; // Chosen arbitrarily
 
-pub fn encode_u16(
+pub fn encode_f32(
     name: &str,
-    val: f32,
+    val: i32,
     buffer: &mut ArrayString<[u8; MESSAGE_MAX_LEN]>
-) -> Result<(), ()>
+) -> Result<(), ::core::fmt::Error>
 {
-    write!(buffer, "{}:{}", name, val);
+    write!(buffer, "{}:{}", name, val)?;
     Ok(())
 }

@@ -6,6 +6,11 @@ all:
 	make build
 	make gdb
 
+release:
+	xargo build --release
+	make gdb_release
+
+
 build:
 	xargo build
 

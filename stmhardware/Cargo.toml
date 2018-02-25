@@ -20,12 +20,13 @@ license = "MIT OR Apache-2.0"
 codegen-units = 1
 incremental = false
 # These two are needed to not overrun the flash
-opt-level = 1
+opt-level = 0
 lto = true
 
 [profile.release]
 lto = true
 debug = true
+
 [dependencies]
 cortex-m = "0.3.0"
 cortex-m-rtfm = "0.3.1"

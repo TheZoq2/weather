@@ -73,16 +73,24 @@ fn main() {
     loop {
         let result = anemometer.measure();
 
-        let mut encoding_buffer = arrayvec::ArrayString::<[_;16]>::new();
-        let encoded = communication::encode_u16("wind_raw", result, &mut encoding_buffer);
+        let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
+        let encoded = communication::encode_f32("wind_raw", (result * 10.) as i32, &mut encoding_buffer);
 
-        let a = 0;
-        // let send_result = esp8266.send_data(
-        //     esp8266::ConnectionType::Tcp,
-        //     "192.168.1.5",
-        //     2000,
-        //     "temperature:500"
-        // );
+        // let a = 0;
+        let send_result = esp8266.send_data(
+            esp8266::ConnectionType::Tcp,
+            "192.168.1.5",
+            2000,
+            &encoding_buffer
+        );
+
+        match send_result {
+            Ok(_) => {},
+            Err(e) => {
+                esp8266.close_connection();
+                panic!("Something went wrong");
+            }
+        }
 
         // match send_result {
         //     Ok(val) => {},

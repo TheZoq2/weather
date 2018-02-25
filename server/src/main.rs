@@ -1,5 +1,5 @@
 #![feature(plugin)]
-#![plugin(clippy)]
+//#![plugin(clippy)]
 
 use std::io::prelude::*;
 use std::net::{TcpListener};
