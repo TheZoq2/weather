@@ -31,6 +31,7 @@ mod esp8266;
 mod anemometer;
 mod communication;
 mod api;
+mod dhtxx;
 
 
 
@@ -74,7 +75,8 @@ fn main() {
         let result = anemometer.measure();
 
         let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-        let encoded = communication::encode_f32("wind_raw", (result * 10.) as i32, &mut encoding_buffer);
+        communication::encode_f32("wind_raw", (result * 10.) as i32, &mut encoding_buffer)
+            .unwrap();
 
         // let a = 0;
         let send_result = esp8266.send_data(
@@ -86,9 +88,9 @@ fn main() {
 
         match send_result {
             Ok(_) => {},
-            Err(e) => {
-                esp8266.close_connection();
-                panic!("Something went wrong");
+            Err(_e) => {
+                //Something went wrong. Trying to close connection as cleanup
+                esp8266.close_connection().ok();
             }
         }
 
