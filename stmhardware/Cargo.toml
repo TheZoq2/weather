@@ -20,7 +20,7 @@ license = "MIT OR Apache-2.0"
 codegen-units = 1
 incremental = false
 # These two are needed to not overrun the flash
-opt-level = 0
+opt-level = 1
 lto = true
 
 [profile.release]

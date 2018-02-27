@@ -23,7 +23,7 @@ extern crate arrayvec;
 use stm32f103xx_hal::prelude::*;
 use stm32f103xx_hal::serial::{Serial};
 //use stm32f103xx_hal::stm32f103xx::{self};
-use stm32f103xx_hal::time::Hertz;
+use stm32f103xx_hal::time::{Hertz, MonoTimer};
 use stm32f103xx_hal::timer::Timer;
 
 mod serial;
@@ -32,11 +32,13 @@ mod anemometer;
 mod communication;
 mod api;
 mod dhtxx;
+//mod iopin;
 
 
 
 fn main() {
     let p = stm32f103xx::Peripherals::take().unwrap();
+    let cp = stm32f103xx::CorePeripherals::take().unwrap();
 
     let mut flash = p.FLASH.constrain();
     let mut rcc = p.RCC.constrain();
@@ -68,6 +70,12 @@ fn main() {
     let ane_pin = gpioa.pa0.into_floating_input(&mut gpioa.crl);
     let ane_timeout = || (Hertz(1), 5);
     let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, ane_timeout);
+
+    let mut dhtxx_pin = gpioa.pa1.into_push_pull_output(&mut gpioa.crl);
+    let dhtxx_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
+    let dhtxx_mono_timer = MonoTimer::new(cp.DWT, clocks);
+    let dhtxx = dhtxx::Dhtxx::new(dhtxx_mono_timer, dhtxx_timer);
+
 
     esp8266.communicate("+CWJAP?").unwrap();
 
@@ -102,30 +110,9 @@ fn main() {
         //     }
         // }
     }
-
-
-    loop {
-        rtfm::wfi();
-    }
 }
 
 
-/*
-fn on_timer(_: &mut Threshold, mut r: TIM6_DACUNDER::Resources) {
-    // Clear flag to avoid getting stuck in interrupt
-    r.TIMER.wait().unwrap();
-
-    let result = r.AT_BUFFER.parse();
-    match result {
-        Some(status) => {
-            writeln!(hio::hstdout().unwrap(), "Got status: {:?}", status).unwrap();
-        },
-        None => {
-            writeln!(hio::hstdout().unwrap(), "Not an AT command").unwrap();
-        }
-    }
-}
-*/
 
 /*
    Pinout:
