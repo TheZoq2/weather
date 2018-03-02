@@ -21,11 +21,12 @@ codegen-units = 1
 incremental = false
 # These two are needed to not overrun the flash
 opt-level = 1
-lto = true
+lto = false
 
 [profile.release]
 lto = true
 debug = true
+opt-level = 1
 
 [dependencies]
 cortex-m = "0.3.0"
@@ -59,7 +60,11 @@ default-features = false
 [dependencies.stm32f103xx-hal]
 # git = "https://github.com/japaric/stm32f103xx-hal.git"
 path = "../../stm32f103xx-hal"
+features = ["time_units"]
 
 [dependencies.stm32f103xx]
 version = "0.8.0"
 features = ["rt"]
+
+[dependencies.embedded-hal-time]
+path = "../../embed/embedded-hal-time"

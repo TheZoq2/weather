@@ -85,26 +85,26 @@ macro_rules! transmission_return_type {
 /**
   Struct for interracting with an esp8266 wifi module over USART
 */
-pub struct Esp8266<Tx, Rx, Timer, Timeout>
+pub struct Esp8266<Tx, Rx, Timer>
 where Tx: hal::serial::Write<u8>,
       Rx: hal::serial::Read<u8>,
       Timer: hal::timer::CountDown,
-      Timeout: Fn() -> (Timer::Time, u8)
+      Timer::Time: Copy
 {
     tx: Tx,
     rx: Rx,
     timer: Timer,
-    timeout: Timeout
+    timeout: (Timer::Time, u8)
 }
 
-impl<Tx, Rx, Timer, Timeout> Esp8266<Tx, Rx, Timer, Timeout>
+impl<Tx, Rx, Timer> Esp8266<Tx, Rx, Timer>
 where Tx: hal::serial::Write<u8>,
       Rx: hal::serial::Read<u8>,
       Timer: hal::timer::CountDown,
-      Timeout: Fn() -> (Timer::Time, u8)
+      Timer::Time: Copy
 {
 
-    pub fn new(tx: Tx, rx: Rx, timer: Timer, timeout: Timeout) -> return_type!(Self)
+    pub fn new(tx: Tx, rx: Rx, timer: Timer, timeout: (Timer::Time, u8)) -> return_type!(Self)
     {
         let mut result = Self {tx, rx, timer, timeout};
 
@@ -112,7 +112,7 @@ where Tx: hal::serial::Write<u8>,
         result.send_at_command("E0")?;
 
         for _ in 0..3 {
-            result.timer.start((result.timeout)().0);
+            result.timer.start(result.timeout.0);
             block!(result.timer.wait()).unwrap();
         }
         // Read a byte, ignore the result. This is done to clear the buffer
@@ -208,7 +208,7 @@ where Tx: hal::serial::Write<u8>,
         let response = serial::read_until_message(
             &mut self.rx,
             &mut self.timer,
-            &self.timeout,
+            self.timeout,
             &mut buffer,
             &parse_at_response
         );
@@ -231,7 +231,7 @@ where Tx: hal::serial::Write<u8>,
         let result = serial::read_until_message(
             &mut self.rx,
             &mut self.timer,
-            &self.timeout,
+            self.timeout,
             &mut buffer,
             &|buf, _| {
                 if buf[0] == '>' as u8 {

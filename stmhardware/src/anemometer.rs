@@ -1,24 +1,24 @@
 use hal::{timer, digital};
 use nb;
 
-pub struct Anemometer<Pin, Timer, Duration>
+pub struct Anemometer<Pin, Timer>
 where
     Pin: digital::InputPin,
     Timer: timer::CountDown,
-    Duration: Fn() -> (Timer::Time, u8)
+    Timer::Time: Copy
 {
     timer: Timer,
     pin: Pin,
-    duration: Duration
+    duration: (Timer::Time, u8)
 }
 
-impl<Pin, Timer, Duration> Anemometer<Pin, Timer, Duration>
+impl<Pin, Timer> Anemometer<Pin, Timer>
 where
     Pin: digital::InputPin,
     Timer: timer::CountDown,
-    Duration: Fn() -> (Timer::Time, u8)
+    Timer::Time: Copy
 {
-    pub fn new(pin: Pin, timer: Timer, duration: Duration) -> Self {
+    pub fn new(pin: Pin, timer: Timer, duration: (Timer::Time, u8)) -> Self {
         Self {
             pin,
             timer,
@@ -27,13 +27,12 @@ where
     }
 
     pub fn measure(&mut self) -> f32 {
-        let (_, initial_multiplyer) = (self.duration)();
+        let (timeout, initial_multiplyer) = self.duration;
 
         let mut multiplyer = initial_multiplyer;
         let mut last_state = self.pin.is_high();
         let mut cycle_count = 0;
         while multiplyer > 0 {
-            let (timeout, _) = (self.duration)();
             self.timer.start(timeout);
             multiplyer -= 1;
 

@@ -2,14 +2,13 @@ unexport CARGO_INCREMENTAL
 
 TARGET_NAME=thumbv7em-none-eabi
 
-all:
-	make build
-	make gdb
-
 release:
 	xargo build --release
 	make gdb_release
 
+all:
+	make build
+	make gdb
 
 build:
 	xargo build
