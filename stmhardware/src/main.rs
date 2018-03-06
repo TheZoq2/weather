@@ -67,7 +67,7 @@ fn main() {
     );
     let (tx, rx) = serial.split();
 
-    let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, (Hertz(1), 3)).unwrap();
+    // let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, (Hertz(1), 3)).unwrap();
 
     let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
     // TODO: Use internal pull up instead
@@ -81,13 +81,11 @@ fn main() {
     let mut dhtxx = dhtxx::Dhtxx::new(dhtxx_mono_timer, dhtxx_timer);
 
 
-    esp8266.communicate("+CWJAP?").unwrap();
+    // esp8266.communicate("+CWJAP?").unwrap();
 
     loop {
         // read_and_send_wind_speed(&mut esp8266, &mut anemometer);
         dhtxx_pin = read_and_send_dht_data(&mut dhtxx, dhtxx_pin, &mut gpioa.crl);
-        //
-        // delay_fn(&mut dhtxx_pin, &mut dhtxx_timer);
     }
 }
 
@@ -120,24 +118,10 @@ fn read_and_send_dht_data(
     pin: dhtxx::OutPin,
     crl: &mut CRL
 ) -> dhtxx::OutPin {
-    let (reading, pin) = match dht.make_reading(pin, crl) {
-        Ok(val) => val,
-        Err(e) => {
-            panic!()
-        }
-    };
+    let (reading, pin) = dht.make_reading(pin, crl).unwrap();
 
 
     pin
-}
-
-fn delay_fn<T: RealCountDown<Microsecond>>(dhtxx_pin: &mut dhtxx::OutPin, dhtxx_timer: &mut T) {
-    dhtxx_pin.set_high();
-    dhtxx_timer.start_real(Microsecond(18000));
-    block!(dhtxx_timer.wait()).unwrap();
-    dhtxx_pin.set_low();
-    dhtxx_timer.start_real(Microsecond(18000));
-    block!(dhtxx_timer.wait()).unwrap();
 }
 
 /*
