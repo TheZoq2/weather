@@ -1,6 +1,7 @@
 #![feature(proc_macro)]
 #![no_std]
 #![allow(dead_code)]
+#![allow(unused_imports)]
 #![feature(generic_associated_types)]
 
 // extern crate f3;

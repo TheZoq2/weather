@@ -15,7 +15,7 @@ type InPin = PA1<Input<Floating>>;
 #[derive(Debug)]
 pub enum Error {
     Timeout,
-    UnexpectedBitDuration(u32)
+    UnexpectedBitDuration
 }
 
 pub struct Dhtxx<T> 
@@ -54,8 +54,7 @@ where
         // // Wait for low in 80 us
         self.wait_for_pin_with_timeout(&pin, false, Microsecond(80 + TIMEOUT_PADDING))?;
         // Start of actual data
-        //let data = self.read_data(&pin);
-        //data?;
+        let data = self.read_data(&pin)?;
         // XXX Sleep for a while to allow debugging
         self.wait_for_ms(Millisecond(2000));
         let pin = pin.into_push_pull_output(pin_ctrl);
@@ -77,22 +76,15 @@ where
                     }
                 }
 
-                // Wait for the pin to go low and meassure the time it took
-                let start = self.mono_timer.now();
-                while (pin.is_high()) {}
-                let duration_ticks = start.elapsed();
-
-                let duration_ms = (duration_ticks as f32 * tick_length_us) as u32;
-                if duration_ms < 40 {
-                    // received a 1
-                    data[byte] = data[byte] | (1 << index);
+                // Wait for the pin to go low. If it does in 28 us this bit is a 0
+                if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(28)) {
+                    data[byte] |= !(1 << index);
                 }
-                else if duration_ms < 80 {
-                    // Received a 0
-                    data[byte] = data[byte] & (!(1 << index));
+                else if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(70-28)) {
+                    data[byte] &= (1 << index);
                 }
                 else {
-                    return Err(Error::UnexpectedBitDuration(duration_ms))
+                    return Err(Error::Timeout);
                 }
             }
         }
@@ -118,22 +110,16 @@ where
     }
 
     fn wait_for_us(&mut self, timeout: Microsecond) {
-        // Convert timeout to hertz so we can use the timer
         self.countdown_timer.start_real(timeout);
 
         // Result<, !> can be safely unwrapped
         block!(self.countdown_timer.wait()).unwrap();
     }
     fn wait_for_ms(&mut self, timeout: Millisecond) {
-        // Convert timeout to hertz so we can use the timer
         self.countdown_timer.start_real(timeout);
 
         // Result<, !> can be safely unwrapped
         block!(self.countdown_timer.wait()).unwrap();
-    }
-
-    fn read_high_time() {
-        
     }
 }
 
