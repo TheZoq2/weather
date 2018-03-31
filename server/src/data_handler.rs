@@ -3,11 +3,11 @@ use std::thread;
 use std::sync::mpsc::Receiver;
 use chrono::{Utc};
 
-pub fn run_data_handler(rx: Receiver<(String, f32)>, readings: ReadingCollection) {
+pub fn run_data_handler(rx: Receiver<(String, f32, Option<f64>)>, readings: ReadingCollection) {
     thread::spawn(move || {
         loop {
-            let (name, value) = rx.recv().unwrap();
-            let timestamp = Utc::now().timestamp();
+            let (name, value, timestamp) = rx.recv().unwrap();
+            let timestamp = timestamp.unwrap_or(Utc::now().timestamp() as f64);
 
             let mut map = readings.lock().unwrap();
             if !map.contains_key(&name) {

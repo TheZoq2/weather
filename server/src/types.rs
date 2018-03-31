@@ -3,7 +3,7 @@ use std::sync::{Mutex, Arc};
 
 #[derive(Serialize, Deserialize)]
 pub struct Datapoint {
-    pub timestamp: i64,
+    pub timestamp: f64,
     pub value: f32
 }
 

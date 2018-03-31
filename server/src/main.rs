@@ -45,12 +45,12 @@ fn main() {
             config.log_filename,
             Arc::clone(&reading_collection)
         );
-    dummy_data::sin_provider(
-            tx.clone(),
-            "temperature".into(),
-            20.,
-            10.
-        );
+    // dummy_data::sin_provider(
+    //         tx.clone(),
+    //         "temperature".into(),
+    //         20.,
+    //         10.
+    //     );
     web::run_server(
             config.http_address.clone(),
             config.http_port,
@@ -83,8 +83,18 @@ fn main() {
             let split = message.split(':').collect::<Vec<_>>();
 
             let name = split[0].to_string();
-            let value = split[1].to_string().parse::<i32>().unwrap() as f32 / 100.;
-            tx_arc_mutex.lock().unwrap().send((name, value)).unwrap();
+            let value = split[1].to_string().parse::<f32>().unwrap();
+            let timestamp = split.get(2).and_then(|timestamp_str| {
+                match timestamp_str.parse::<f64>() {
+                    Ok(val) => Some(val),
+                    Err(e) => {
+                        println!("Failed to parse {} as a timestamp, ignoring. {}", timestamp_str, e);
+                        None
+                    }
+                }
+            });
+
+            tx_arc_mutex.lock().unwrap().send((name, value, timestamp)).unwrap();
         });
     }
 }

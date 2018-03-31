@@ -1,24 +1,50 @@
 use simple_server::Server;
-use http::header;
+use http::{header, StatusCode};
 use serde_json;
 use std::thread;
 
 use types::ReadingCollection;
+
+use error::{Result, ErrorKind};
+
+fn handle_data_request_query(
+    request_path_parts: &[&str],
+    readings: &ReadingCollection
+) -> Result<String> {
+    // If a datafield is specified, return that data
+    if let Some(name) = request_path_parts.get(2) {
+        let readings = readings.lock().unwrap();
+        let data = readings.get(*name)
+            .ok_or(ErrorKind::NoSuchDataName(name.to_string()));
+
+        Ok(serde_json::to_string(&data?)?)
+    }
+    // Otherwise return a list of available data
+    else {
+        let readings = readings.lock().unwrap();
+        let available_data = readings.keys().collect::<Vec<_>>();
+        Ok(serde_json::to_string(&available_data)?)
+    }
+}
 
 pub fn run_server(listen_address: String, port: u16, readings: ReadingCollection) {
     let server = Server::new(move |request, mut response| {
         let request_path = request.uri().path();
         let request_path_parts = request_path.split('/').collect::<Vec<_>>();
 
-        let request_response = match request_path_parts[1] {
+        let handled = match request_path_parts[1] {
             "data" => {
-                let name = request_path_parts.get(2).expect("Data query must specify a data name");
-
-                let readings = readings.lock().unwrap();
-                let data = readings.get(*name).expect("No such data");
-                serde_json::to_string(&data).unwrap()
+                handle_data_request_query(&request_path_parts, &readings)
             }
-            other => format!("unhandled uri: {}", other)
+            _ => Err(ErrorKind::UnhandledURI(request_path.to_string()).into())
+        };
+
+        let request_response = match handled {
+            Ok(val) => val,
+            Err(e) => {
+                response.status(StatusCode::NOT_FOUND);
+                format!("{}", e)
+            }
         };
 
         response.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");

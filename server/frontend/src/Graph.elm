@@ -15,15 +15,25 @@ transformToGraphCoordinates viewHeight (minVal, maxVal) val =
 
 
 
-drawGraph : (Int, Int) -> (Float, Float) -> List Float -> Svg a
+drawGraph : (Int, Int) -> (Float, Float) -> List (Float, Float) -> Svg a
 drawGraph (viewW, viewH) (min, max) data =
     let
+        times = List.map Tuple.first data
+        minTime = Maybe.withDefault 0 <| List.minimum times
+        maxTime = Maybe.withDefault 1 <| List.maximum times
+
         x_points =
-            List.range 0 (List.length data)
-            |> List.map (\x -> toFloat x / toFloat (List.length data) * (toFloat viewW))
+            List.map (transformToGraphCoordinates (toFloat viewW) (minTime, maxTime)) times
+            -- List.range 0 (List.length data)
+            -- |> List.map (\x -> toFloat x / toFloat (List.length data) * (toFloat viewW))
+
+        _ = Debug.log "x_points" x_points
+
+
+        y_points = List.map Tuple.second data
 
         pointsString =
-            List.map (transformToGraphCoordinates (toFloat viewH) (min, max)) data
+            List.map (transformToGraphCoordinates (toFloat viewH) (min, max)) y_points
             |> List.map2 (,) x_points
             |> List.map (\(x,y) -> toString x ++ "," ++ toString y)
             |> List.intersperse " "
