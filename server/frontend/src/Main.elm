@@ -10,6 +10,7 @@ import Svg
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Dict exposing (Dict)
+import List.Extra
 
 import Graph
 import Time
@@ -23,31 +24,16 @@ type alias ReadingProperty =
     }
 
 
-stepPreprocessor : 
+stepPreprocessor : List (Time, Float) -> List (Time, Float)
+stepPreprocessor original =
+    let
+        duplicated = List.Extra.interweave original original
 
--- stepPreprocessor : List (Time, Float) -> List (Time, Float)
--- stepPreprocessor original =
---     let
---         duplicated = List.foldl (++) []
---             <| List.map (\(time, value) -> [(time, value), (time, value)]) original
--- 
---         withoutFirst = Maybe.withDefault [] <| List.tail duplicated
--- 
---         timeShiftFunction: (Time, Float) -> (Time, List (Time, Float)) -> (Time, List (Time, Float))
---         timeShiftFunction (currTime, currValue) (accTime, accValue) =
---             (currTime, [(accTime, currValue)] ++ accValue)
---     in
---         case (List.head withoutFirst, List.tail withoutFirst) of
---             (Just (firstTime, _), Just rest) ->
---                 Tuple.second
---                     <| List.foldl
---                         timeShiftFunction
---                         (firstTime, [])
---                         rest
---             _ ->
---                 []
+        (times, values) = List.unzip duplicated
 
-
+        shiftedTimes = List.drop 1 times
+    in
+        List.Extra.zip shiftedTimes values
 
 readingProperties : String -> ReadingProperty
 readingProperties name =
