@@ -1,0 +1,3 @@
+[submodule "server/frontend/graph"]
+	path = server/frontend/graph
+	url = git@github.com:TheZoq2/elm-graph.git
