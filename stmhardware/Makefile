@@ -1,6 +1,7 @@
 unexport CARGO_INCREMENTAL
 
 TARGET_NAME=thumbv7m-none-eabi
+PROJECT_NAME=weather
 
 release:
 	cargo build --release
@@ -14,8 +15,6 @@ build:
 	cargo build
 
 openocd:
-	# openocd -f interface/stlink-v2.cfg -f target/stm32f1x.cfg
-	# openocd -f interface/stlink-v2.cfg -f target/stm32f1x.cfg -f bluepill.cfg
 	openocd -f bluepill.cfg
 
 discovery_openocd:
@@ -23,7 +22,7 @@ discovery_openocd:
 
 
 gdb:
-	arm-none-eabi-gdb target/${TARGET_NAME}/debug/cortex-m-quickstart
+	arm-none-eabi-gdb target/${TARGET_NAME}/debug/${PROJECT_NAME}
 
 gdb_release:
-	arm-none-eabi-gdb target/${TARGET_NAME}/release/cortex-m-quickstart
+	arm-none-eabi-gdb target/${TARGET_NAME}/release/${PROJECT_NAME}
