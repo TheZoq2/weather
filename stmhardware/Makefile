@@ -1,9 +1,9 @@
 unexport CARGO_INCREMENTAL
 
-TARGET_NAME=thumbv7em-none-eabi
+TARGET_NAME=thumbv7m-none-eabi
 
 release:
-	xargo build --release
+	cargo build --release
 	make gdb_release
 
 all:
@@ -11,7 +11,7 @@ all:
 	make gdb
 
 build:
-	xargo build
+	cargo build
 
 openocd:
 	# openocd -f interface/stlink-v2.cfg -f target/stm32f1x.cfg

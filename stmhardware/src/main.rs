@@ -20,6 +20,7 @@ extern crate embedded_hal_time;
 extern crate stm32f103xx_hal;
 extern crate stm32f103xx;
 extern crate arrayvec;
+extern crate panic_abort;
 
 
 use stm32f103xx_hal::prelude::*;
