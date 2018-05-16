@@ -1,10 +1,8 @@
 #![feature(plugin)]
 //#![plugin(clippy)]
 
-use std::io::prelude::*;
 use std::net::{TcpListener};
 
-use std::thread;
 use std::sync::mpsc::{channel};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -29,6 +27,8 @@ mod dummy_data;
 mod logger;
 mod error;
 mod config;
+mod tcp_handler;
+mod constants;
 
 fn main() {
     let config = config::read_config(&PathBuf::from("config.toml")).unwrap();
@@ -56,7 +56,7 @@ fn main() {
             config.http_port,
             Arc::clone(&reading_collection)
         );
-    data_handler::run_data_handler(
+    data_handler::run_command_handler(
             rx,
             Arc::clone(&reading_collection)
         );
@@ -67,34 +67,7 @@ fn main() {
     println!("Listener started, waiting for connections on port 2000");
 
     let tx_arc_mutex = Arc::new(Mutex::new(tx));
-
-    for stream in listener.incoming() {
-        println!("New connection");
-
-        let tx_arc_mutex = Arc::clone(&tx_arc_mutex);
-        thread::spawn(move || {
-            let mut stream = stream.unwrap();
-
-            let mut buffer = vec!();
-            stream.read_to_end(&mut buffer).unwrap();
-
-            let message = String::from_utf8(buffer).unwrap();
-            println!("Got message: {}", message);
-            let split = message.split(':').collect::<Vec<_>>();
-
-            let name = split[0].to_string();
-            let value = split[1].to_string().parse::<f32>().unwrap();
-            let timestamp = split.get(2).and_then(|timestamp_str| {
-                match timestamp_str.parse::<f64>() {
-                    Ok(val) => Some(val),
-                    Err(e) => {
-                        println!("Failed to parse {} as a timestamp, ignoring. {}", timestamp_str, e);
-                        None
-                    }
-                }
-            });
-
-            tx_arc_mutex.lock().unwrap().send((name, value, timestamp)).unwrap();
-        });
-    }
+    tcp_handler::tcp_handler(listener, tx_arc_mutex);
 }
+
+

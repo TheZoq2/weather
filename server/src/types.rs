@@ -7,4 +7,12 @@ pub struct Datapoint {
     pub value: f32
 }
 
+pub enum Command {
+    Reset(String), // Removes all data for the specified reading
+    AddDatapoint(String, f32, Option<f64>)
+}
+
 pub type ReadingCollection = Arc<Mutex<HashMap<String, Vec<Datapoint>>>>;
+
+
+
