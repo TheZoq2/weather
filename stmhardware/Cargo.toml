@@ -25,7 +25,7 @@ lto = false
 [profile.release]
 lto = true
 debug = true
-opt-level = 0
+opt-level = 3
 
 [dependencies]
 cortex-m = "0.4.3"

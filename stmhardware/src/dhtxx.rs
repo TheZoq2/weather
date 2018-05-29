@@ -1,5 +1,6 @@
 use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};
 use stm32f103xx_hal::gpio::gpioa::{PA1, CRL};
+use stm32f103xx_hal::gpio::gpiob::{PB12};
 use stm32f103xx_hal::time::{MonoTimer, Hertz};
 use stm32f103xx_hal::timer::Timer;
 use stm32f103xx::TIM4;
@@ -10,12 +11,14 @@ use embedded_hal_time::{RealCountDown, Microsecond, Millisecond};
 const TIMEOUT_PADDING: u32 = 5;
 
 pub type OutPin = PA1<Output<PushPull>>;
+pub type DebugPin = PB12<Output<PushPull>>;
 type InPin = PA1<Input<Floating>>;
 
 #[derive(Debug)]
 pub enum Error {
     Timeout,
-    UnexpectedBitDuration
+    UnexpectedBitDuration,
+    IncorrectParity
 }
 
 pub struct Dhtxx<T> 
@@ -27,8 +30,8 @@ where
 }
 
 pub struct Reading {
-    temperature: u16,
-    humidity: u16
+    pub temperature: i16,
+    pub humidity: u16
 }
 
 impl<T> Dhtxx<T>
@@ -39,34 +42,36 @@ where
         Self {mono_timer, countdown_timer}
     }
 
-    pub fn make_reading(&mut self, mut pin: OutPin, pin_ctrl: &mut CRL)
+    pub fn make_reading(&mut self, mut pin: OutPin, pin_ctrl: &mut CRL, debug_pin: &mut DebugPin)
         -> Result<(Reading, OutPin), Error>
     {
         // Set low for 18 ms
         pin.set_low();
         self.wait_for_ms(Millisecond(18));
         // Pull up voltage, wait for 20us
-        let mut pin = pin.into_floating_input(pin_ctrl);
+        let pin = pin.into_floating_input(pin_ctrl);
         // Wait for input to go low. 20us timeout
         self.wait_for_pin_with_timeout(&pin, false, Microsecond(40 + TIMEOUT_PADDING))?;
+        debug_pin.set_low();
         // // Wait for high in 80 us
         self.wait_for_pin_with_timeout(&pin, true, Microsecond(80 + TIMEOUT_PADDING))?;
+        debug_pin.set_high();
         // // Wait for low in 80 us
         self.wait_for_pin_with_timeout(&pin, false, Microsecond(80 + TIMEOUT_PADDING))?;
+        debug_pin.set_low();
         // Start of actual data
         let data = self.read_data(&pin)?;
+
+        let reading = decode_dht_data(&data)?;
         // XXX Sleep for a while to allow debugging
-        self.wait_for_ms(Millisecond(2000));
         let pin = pin.into_push_pull_output(pin_ctrl);
-        Ok((Reading{temperature: 0, humidity: 0}, pin.into_push_pull_output(pin_ctrl)))
+        Ok((reading, pin.into_push_pull_output(pin_ctrl)))
     }
 
-    fn read_data(&mut self, pin: &InPin) -> Result<[u8; 4], Error> {
-        let mut data = [0;4];
-        let frequency = self.mono_timer.frequency();
-        let tick_length_us: f32 = 1_000_000.0 / frequency.0 as f32;
+    fn read_data(&mut self, pin: &InPin) -> Result<[u8; 5], Error> {
+        let mut data = [0;5];
 
-        for byte in 0..4 {
+        for byte in 0..5 {
             for index in 0..8 {
                 // Wait for the pin to go high
                 match self.wait_for_pin_with_timeout(&pin, true, Microsecond(50 + TIMEOUT_PADDING)) {
@@ -81,7 +86,7 @@ where
                     data[byte] |= !(1 << index);
                 }
                 else if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(70-28)) {
-                    data[byte] &= (1 << index);
+                    data[byte] &= 1 << index;
                 }
                 else {
                     return Err(Error::Timeout);
@@ -123,3 +128,39 @@ where
     }
 }
 
+
+/**
+  Decodes a byte sequence received from a dhtxx sensor.
+
+  https://www.waveshare.com/wiki/DHT22_Temperature-Humidity_Sensor
+*/
+fn decode_dht_data(data: &[u8;5]) -> Result<Reading, Error> {
+    // Check the parity bit
+    let mut parity: u8 = 0;
+    for bit in 0..data.len()-1 {
+        parity += data[bit];
+    }
+
+    if parity != data[data.len()] {
+        return Err(Error::IncorrectParity)
+    }
+
+    // Humidity is simply a 16 bit number
+    let humidity = ((data[0] as u16) << 8) + (data[1] as u16);
+
+    // Absolute value of the temperature is the 15 least significant bits of the reading
+    let temperature_abs = (((data[2] & 0x7f) as u16) << 8) + (data[3] as u16);
+
+    // The sign of the temperature is negative if the msb is 1
+    let temperature_negative = (data[2] & 0b10000000) == 0b10000000;
+
+    // Apply the sign
+    let temperature = if temperature_negative {
+        -(temperature_abs as i16)
+    }
+    else {
+        temperature_abs as i16
+    };
+
+    Ok(Reading{humidity, temperature})
+}

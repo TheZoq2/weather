@@ -29,6 +29,7 @@ use stm32f103xx_hal::serial::{Serial};
 use stm32f103xx_hal::time::{Hertz, MonoTimer};
 use stm32f103xx_hal::timer::Timer;
 use stm32f103xx_hal::gpio::gpioa::{CRL};
+use stm32f103xx_hal::gpio::gpiob;
 use embedded_hal_time::{RealCountDown, Microsecond};
 
 mod serial;
@@ -38,7 +39,6 @@ mod communication;
 mod api;
 mod dhtxx;
 mod types;
-//mod iopin;
 
 
 
@@ -49,6 +49,7 @@ fn main() {
     let mut flash = p.FLASH.constrain();
     let mut rcc = p.RCC.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
+    let mut gpiob = p.GPIOB.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
@@ -82,20 +83,25 @@ fn main() {
     let dhtxx_mono_timer = MonoTimer::new(cp.DWT, clocks);
     let mut dhtxx = dhtxx::Dhtxx::new(dhtxx_mono_timer, dhtxx_timer);
 
+    let mut debug_pin = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
+    debug_pin.set_high();
+
 
     // esp8266.communicate("+CWJAP?").unwrap();
 
     loop {
         // read_and_send_wind_speed(&mut esp8266, &mut anemometer);
-        dhtxx_pin = read_and_send_dht_data(&mut dhtxx, dhtxx_pin, &mut gpioa.crl);
+        // dhtxx_pin = read_and_send_dht_data(&mut esp8266, &mut dhtxx, dhtxx_pin, &mut gpioa.crl, &mut debug_pin);
+        dhtxx_pin = read_and_send_dht_data(&mut dhtxx, dhtxx_pin, &mut gpioa.crl, &mut debug_pin);
+        loop {}
     }
 }
 
-fn read_and_send_wind_speed(esp8266: &mut types::EspType, anemometer: &mut types::AnemometerType) {
+fn read_and_send_wind_speed(esp8266: &mut types::EspType, anemometer: &mut types::AnemometerType){
     let result = anemometer.measure();
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-    communication::encode_f32("wind_raw", (result * 10.) as i32, &mut encoding_buffer)
+    communication::encode_i32("wind_raw", (result * 10.) as i32, &mut encoding_buffer)
         .unwrap();
 
     // let a = 0;
@@ -116,12 +122,27 @@ fn read_and_send_wind_speed(esp8266: &mut types::EspType, anemometer: &mut types
 }
 
 fn read_and_send_dht_data(
+    // esp8266: &mut types::EspType,
     dht: &mut types::DhtType,
     pin: dhtxx::OutPin,
-    crl: &mut CRL
+    crl: &mut CRL,
+    debug_pin: &mut dhtxx::DebugPin
 ) -> dhtxx::OutPin {
-    let (reading, pin) = dht.make_reading(pin, crl).unwrap();
+    let (reading, pin) = dht.make_reading(pin, crl, debug_pin).unwrap();
 
+    // let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
+    // communication::encode_i32("temperature", reading.temperature as i32, &mut encoding_buffer)
+    //     .unwrap();
+    // communication::encode_i32("humidity", reading.humidity as i32, &mut encoding_buffer)
+    //     .unwrap();
+
+    // // let a = 0;
+    // let send_result = esp8266.send_data(
+    //     esp8266::ConnectionType::Tcp,
+    //     "192.168.1.5",
+    //     2000,
+    //     &encoding_buffer
+    // );
 
     pin
 }
