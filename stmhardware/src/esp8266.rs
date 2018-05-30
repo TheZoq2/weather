@@ -3,6 +3,7 @@ extern crate nb;
 use core::cmp::min;
 use core::fmt::{self, Write};
 use arrayvec::ArrayString;
+use itoa;
 
 // use hal::prelude::*;
 
@@ -169,7 +170,8 @@ where Tx: hal::serial::Write<u8>,
         // Length of biggest u16:
         const PORT_STRING_LENGTH: usize = 5;
         let mut port_str = ArrayString::<[_;PORT_STRING_LENGTH]>::new();
-        write!(&mut port_str, "{}", port)?;
+        // write!(&mut port_str, "{}", port)?;
+        itoa::fmt(&mut port_str, port)?;
 
         self.send_raw("AT+CIPSTART=\"".as_bytes())?;
         self.send_raw(connection_type.as_str().as_bytes())?;
@@ -185,7 +187,8 @@ where Tx: hal::serial::Write<u8>,
         // You can only send 2048 bytes per packet 
         assert!(message_length < 2048);
         let mut length_buffer = ArrayString::<[_; 4]>::new();
-        write!(&mut length_buffer, "{}", message_length)?;
+        // write!(&mut length_buffer, "{}", message_length)?;
+        itoa::fmt(&mut length_buffer, message_length)?;
 
         self.send_raw(b"AT+CIPSEND=")?;
         self.send_raw(length_buffer.as_bytes())?;

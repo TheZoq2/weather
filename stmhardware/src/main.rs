@@ -21,6 +21,7 @@ extern crate stm32f103xx_hal;
 extern crate stm32f103xx;
 extern crate arrayvec;
 extern crate panic_abort;
+extern crate itoa;
 
 
 use stm32f103xx_hal::prelude::*;
@@ -40,7 +41,7 @@ mod api;
 mod dhtxx;
 mod types;
 
-
+const big_thing: [u8; 5000] = [0; 5000];
 
 fn main() {
     let p = stm32f103xx::Peripherals::take().unwrap();
@@ -92,7 +93,7 @@ fn main() {
     loop {
         // read_and_send_wind_speed(&mut esp8266, &mut anemometer);
         // dhtxx_pin = read_and_send_dht_data(&mut esp8266, &mut dhtxx, dhtxx_pin, &mut gpioa.crl, &mut debug_pin);
-        dhtxx_pin = read_and_send_dht_data(&mut dhtxx, dhtxx_pin, &mut gpioa.crl, &mut debug_pin);
+        // dhtxx_pin = read_and_send_dht_data(&mut dhtxx, dhtxx_pin, &mut gpioa.crl, &mut debug_pin);
         loop {}
     }
 }
@@ -122,7 +123,7 @@ fn read_and_send_wind_speed(esp8266: &mut types::EspType, anemometer: &mut types
 }
 
 fn read_and_send_dht_data(
-    // esp8266: &mut types::EspType,
+    esp8266: &mut types::EspType,
     dht: &mut types::DhtType,
     pin: dhtxx::OutPin,
     crl: &mut CRL,
@@ -130,19 +131,19 @@ fn read_and_send_dht_data(
 ) -> dhtxx::OutPin {
     let (reading, pin) = dht.make_reading(pin, crl, debug_pin).unwrap();
 
-    // let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-    // communication::encode_i32("temperature", reading.temperature as i32, &mut encoding_buffer)
-    //     .unwrap();
-    // communication::encode_i32("humidity", reading.humidity as i32, &mut encoding_buffer)
-    //     .unwrap();
+    let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
+    communication::encode_i32("temperature", reading.temperature as i32, &mut encoding_buffer)
+        .unwrap();
+    communication::encode_i32("humidity", reading.humidity as i32, &mut encoding_buffer)
+        .unwrap();
 
-    // // let a = 0;
-    // let send_result = esp8266.send_data(
-    //     esp8266::ConnectionType::Tcp,
-    //     "192.168.1.5",
-    //     2000,
-    //     &encoding_buffer
-    // );
+    // let a = 0;
+    let send_result = esp8266.send_data(
+        esp8266::ConnectionType::Tcp,
+        "192.168.1.5",
+        2000,
+        &encoding_buffer
+    );
 
     pin
 }

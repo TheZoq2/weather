@@ -57,3 +57,7 @@ features = ["rt"]
 
 [dependencies.embedded-hal-time]
 path = "../../embed/embedded-hal-time"
+
+[dependencies.itoa]
+default-features = false
+version = "0.4"
