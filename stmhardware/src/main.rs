@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![feature(generic_associated_types)]
+#![feature(start)]
 
 // extern crate f3;
 #[macro_use(block)]
@@ -41,9 +42,8 @@ mod api;
 mod dhtxx;
 mod types;
 
-const big_thing: [u8; 5000] = [0; 5000];
-
-fn main() {
+#[start]
+fn main(_: isize, _: *const *const u8) -> isize {
     let p = stm32f103xx::Peripherals::take().unwrap();
     let cp = stm32f103xx::CorePeripherals::take().unwrap();
 

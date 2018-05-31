@@ -26,3 +26,6 @@ gdb:
 
 gdb_release:
 	arm-none-eabi-gdb target/${TARGET_NAME}/release/${PROJECT_NAME}
+
+doc:
+	cargo doc
