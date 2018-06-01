@@ -26,14 +26,13 @@ lto = false
 lto = true
 debug = true
 opt-level = 3
+codegen-units = 1
 
 [dependencies]
 cortex-m = "0.5.0"
-cortex-m-rt = "0.5.0"
-cortex-m-rtfm = "0.3.2"
 cortex-m-semihosting = "0.3.0"
 nb = "0.1.1"
-panic-abort = "0.1.1"
+panic-semihosting = "0.2.0"
 
 [dependencies.embedded-hal]
 version = "0.2.1"
@@ -58,3 +57,11 @@ path = "../../embed/embedded-hal-time"
 [dependencies.itoa]
 default-features = false
 version = "0.4"
+
+[dependencies.cortex-m-rt]
+version = "0.5.0"
+features = ["device"]
+
+
+[features]
+rt = ["cortex-m-rt/device"]

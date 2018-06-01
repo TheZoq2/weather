@@ -1,4 +1,5 @@
 #![feature(proc_macro)]
+#![no_main]
 #![no_std]
 #![allow(dead_code)]
 #![allow(unused_imports)]
@@ -9,11 +10,13 @@
 #[macro_use(block)]
 extern crate nb;
 
-extern crate cortex_m_rtfm as rtfm;
 
 // #[macro_use]
-// extern crate cortex_m;
+extern crate cortex_m;
 extern crate cortex_m_semihosting;
+
+#[macro_use(entry, exception)]
+extern crate cortex_m_rt as rt;
 
 extern crate embedded_hal as hal;
 extern crate embedded_hal_time;
@@ -21,9 +24,11 @@ extern crate embedded_hal_time;
 extern crate stm32f103xx_hal;
 extern crate stm32f103xx;
 extern crate arrayvec;
-extern crate panic_abort;
+extern crate panic_semihosting;
 extern crate itoa;
 
+use cortex_m::asm;
+use rt::ExceptionFrame;
 
 use stm32f103xx_hal::prelude::*;
 use stm32f103xx_hal::serial::{Serial};
@@ -42,8 +47,9 @@ mod api;
 mod dhtxx;
 mod types;
 
-#[start]
-fn main(_: isize, _: *const *const u8) -> isize {
+entry!(main);
+
+fn main() -> ! {
     let p = stm32f103xx::Peripherals::take().unwrap();
     let cp = stm32f103xx::CorePeripherals::take().unwrap();
 
@@ -148,6 +154,20 @@ fn read_and_send_dht_data(
     pin
 }
 
+
+// define the hard fault handler
+exception!(HardFault, hard_fault);
+
+fn hard_fault(ef: &ExceptionFrame) -> ! {
+    panic!("HardFault at {:#?}", ef);
+}
+
+// define the default exception handler
+exception!(*, default_handler);
+
+fn default_handler(irqn: i16) {
+    panic!("Unhandled exception (IRQn = {})", irqn);
+}
 /*
    Pinout:
 
