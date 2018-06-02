@@ -1,5 +1,4 @@
-use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};
-use stm32f103xx_hal::gpio::gpioa::{PA1, CRL};
+use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};use stm32f103xx_hal::gpio::gpioa::{PA1, CRL};
 use stm32f103xx_hal::gpio::gpiob::{PB12};
 use stm32f103xx_hal::time::{MonoTimer, Hertz};
 use stm32f103xx_hal::timer::Timer;
@@ -25,7 +24,6 @@ pub struct Dhtxx<T>
 where
     T: RealCountDown<Microsecond> + RealCountDown<Millisecond>
 {
-    mono_timer: MonoTimer,
     countdown_timer: T
 }
 
@@ -38,8 +36,8 @@ impl<T> Dhtxx<T>
 where
     T: RealCountDown<Microsecond> + RealCountDown<Millisecond>
 {
-    pub fn new(mono_timer: MonoTimer, countdown_timer: T) -> Self {
-        Self {mono_timer, countdown_timer}
+    pub fn new(countdown_timer: T) -> Self {
+        Self {countdown_timer}
     }
 
     pub fn make_reading(&mut self, mut pin: OutPin, pin_ctrl: &mut CRL, debug_pin: &mut DebugPin)
@@ -72,7 +70,7 @@ where
         let mut data = [0;5];
 
         for byte in 0..5 {
-            for index in 0..8 {
+            for _ in 0..8 {
                 // Wait for the pin to go high
                 match self.wait_for_pin_with_timeout(&pin, true, Microsecond(50 + TIMEOUT_PADDING)) {
                     Ok(_) => {},
@@ -84,7 +82,7 @@ where
                 // Wait for the pin to go low. If it does in 28 us this bit is a 0
                 if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(28)) {
                     // data[byte] &= ~(1 << index);
-                    data[byte] = (data[byte] << 1);
+                    data[byte] = data[byte] << 1;
                 }
                 else if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(70-28)) {
                     data[byte] = (data[byte] << 1) | 1;

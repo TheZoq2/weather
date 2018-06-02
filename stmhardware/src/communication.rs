@@ -31,8 +31,6 @@ pub fn encode_f32(
     buffer: &mut ArrayString<[u8; MESSAGE_MAX_LEN]>
 ) -> Result<(), ::core::fmt::Error>
 {
-    let mut val_str = ArrayString::<[u8; MESSAGE_MAX_LEN]>::new();
-
     write!(buffer, "{}:{}", name, val)?;
 
     Ok(())

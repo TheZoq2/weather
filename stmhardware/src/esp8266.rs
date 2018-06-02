@@ -28,11 +28,13 @@ pub enum Error<R, T> {
     Fmt(fmt::Error)
 }
 
+#[derive(Debug)]
 pub enum TransmissionStep {
     Connect,
     Send,
     Close
 }
+#[derive(Debug)]
 pub struct TransmissionError<R, T> {
     step: TransmissionStep,
     cause: Error<R, T>

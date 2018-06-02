@@ -51,7 +51,6 @@ entry!(main);
 
 fn main() -> ! {
     let p = stm32f103xx::Peripherals::take().unwrap();
-    let cp = stm32f103xx::CorePeripherals::take().unwrap();
 
     let mut flash = p.FLASH.constrain();
     let mut rcc = p.RCC.constrain();
@@ -87,8 +86,7 @@ fn main() -> ! {
 
     let mut dhtxx_pin = gpioa.pa1.into_push_pull_output(&mut gpioa.crl);
     let dhtxx_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
-    let dhtxx_mono_timer = MonoTimer::new(cp.DWT, clocks);
-    let mut dhtxx = dhtxx::Dhtxx::new(dhtxx_mono_timer, dhtxx_timer);
+    let mut dhtxx = dhtxx::Dhtxx::new(dhtxx_timer);
 
     let mut debug_pin = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
     debug_pin.set_high();
@@ -97,9 +95,8 @@ fn main() -> ! {
     // esp8266.communicate("+CWJAP?").unwrap();
 
     loop {
-        // read_and_send_wind_speed(&mut esp8266, &mut anemometer);
         dhtxx_pin = read_and_send_dht_data(&mut esp8266, &mut dhtxx, dhtxx_pin, &mut gpioa.crl, &mut debug_pin);
-        // dhtxx_pin = read_and_send_dht_data(&mut dhtxx, dhtxx_pin, &mut gpioa.crl, &mut debug_pin);
+        read_and_send_wind_speed(&mut esp8266, &mut anemometer);
         loop {}
     }
 }
@@ -140,15 +137,15 @@ fn read_and_send_dht_data(
     {
         let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
         communication::encode_f32("temperature", reading.temperature, &mut encoding_buffer)
-            .unwrap();
+            .expect("Failed to encode temperature");
 
         // let a = 0;
-        let send_result = esp8266.send_data(
+        esp8266.send_data(
             esp8266::ConnectionType::Tcp,
             "192.168.1.5",
             2000,
             &encoding_buffer
-        );
+        ).expect("Failed to send temperature reading");
     }
 
     {
@@ -157,12 +154,12 @@ fn read_and_send_dht_data(
             .unwrap();
 
         // let a = 0;
-        let send_result = esp8266.send_data(
+        esp8266.send_data(
             esp8266::ConnectionType::Tcp,
             "192.168.1.5",
             2000,
             &encoding_buffer
-        );
+        ).expect("Failed to send humidity reading");
     }
 
     pin
