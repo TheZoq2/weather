@@ -30,8 +30,8 @@ where
 }
 
 pub struct Reading {
-    pub temperature: i16,
-    pub humidity: u16
+    pub temperature: f32,
+    pub humidity: f32
 }
 
 impl<T> Dhtxx<T>
@@ -83,10 +83,11 @@ where
 
                 // Wait for the pin to go low. If it does in 28 us this bit is a 0
                 if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(28)) {
-                    data[byte] |= !(1 << index);
+                    // data[byte] &= ~(1 << index);
+                    data[byte] = (data[byte] << 1);
                 }
                 else if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(70-28)) {
-                    data[byte] &= 1 << index;
+                    data[byte] = (data[byte] << 1) | 1;
                 }
                 else {
                     return Err(Error::Timeout);
@@ -132,7 +133,7 @@ where
 /**
   Decodes a byte sequence received from a dhtxx sensor.
 
-  https://www.waveshare.com/wiki/DHT22_Temperature-Humidity_Sensor
+  https://github.com/adafruit/DHT-sensor-library/blob/master/DHT.cpp
 */
 fn decode_dht_data(data: &[u8;5]) -> Result<Reading, Error> {
     // Check the parity bit
@@ -141,25 +142,27 @@ fn decode_dht_data(data: &[u8;5]) -> Result<Reading, Error> {
         parity += data[bit];
     }
 
-    if parity != data[data.len()] {
+    if parity != data[data.len()-1] {
         return Err(Error::IncorrectParity)
     }
 
     // Humidity is simply a 16 bit number
-    let humidity = ((data[0] as u16) << 8) + (data[1] as u16);
+    // let humidity = ((data[0] as u16) << 8) + (data[1] as u16);
+    let humidity = data[0] as f32 + ((data[1] as f32) * 0.1);
 
     // Absolute value of the temperature is the 15 least significant bits of the reading
-    let temperature_abs = (((data[2] & 0x7f) as u16) << 8) + (data[3] as u16);
+    // let temperature_abs = (((data[2] & 0x7f) as u16) << 8) + (data[3] as u16);
+    let temperature_abs = (data[2] & 0x7f) as f32 + ((data[3] as f32) * 0.1);
 
     // The sign of the temperature is negative if the msb is 1
     let temperature_negative = (data[2] & 0b10000000) == 0b10000000;
 
     // Apply the sign
     let temperature = if temperature_negative {
-        -(temperature_abs as i16)
+        -temperature_abs
     }
     else {
-        temperature_abs as i16
+        temperature_abs
     };
 
     Ok(Reading{humidity, temperature})

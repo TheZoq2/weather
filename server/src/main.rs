@@ -62,7 +62,8 @@ fn main() {
         );
 
 
-    let listener = TcpListener::bind(&format!("{}:{}", config.tcp_address, config.tcp_port)).unwrap();
+    let listener = TcpListener::bind(&format!("{}:{}", config.tcp_address, config.tcp_port))
+        .unwrap();
 
     println!("Listener started, waiting for connections on port 2000");
 

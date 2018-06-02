@@ -41,6 +41,8 @@ pub fn tcp_handler(listener: TcpListener, tx_arc_mutex: Arc<Mutex<Sender<Command
 fn handle_reading(message: &str) -> (String, f32, Option<f64>) {
     let split = message.split(':').collect::<Vec<_>>();
 
+    println!("got message: {}", message);
+
     let name = split[0].to_string();
     let value = split[1].to_string().parse::<f32>().unwrap();
     let timestamp = split.get(2).and_then(|timestamp_str| {
