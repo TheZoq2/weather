@@ -109,6 +109,13 @@ impl Anemometer {
             scad!(Translate(vec3(xy_offset, xy_offset, z_offset)); shape)
         };
 
+        let magnet_holes = (0..3)
+                .map(|r| r as f32)
+                .fold(scad!(Union), |mut acc, r| {
+                    acc.add_child(scad!(Rotate(r * 360./3., vec3(0.,0.,1.)); magnet_hole.clone()));
+                    acc
+                });
+
         scad!(Difference;
             scad!(Union; {
                 main
@@ -116,7 +123,7 @@ impl Anemometer {
             scad!(Union; {
                 screw_hole,
                 arm_holes,
-                magnet_hole
+                magnet_holes
             })
         )
     }

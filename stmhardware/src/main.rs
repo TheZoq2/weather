@@ -37,7 +37,7 @@ use stm32f103xx_hal::time::{Hertz, MonoTimer};
 use stm32f103xx_hal::timer::Timer;
 use stm32f103xx_hal::gpio::gpioa::{CRL};
 use stm32f103xx_hal::gpio::gpiob;
-use embedded_hal_time::{RealCountDown, Microsecond};
+use embedded_hal_time::{RealCountDown, Microsecond, Second};
 
 mod serial;
 mod esp8266;
@@ -81,8 +81,7 @@ fn main() -> ! {
     let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
     // TODO: Use internal pull up instead
     let ane_pin = gpioa.pa0.into_floating_input(&mut gpioa.crl);
-    let ane_timeout = (Hertz(1), 5);
-    let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, ane_timeout);
+    let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(5), 3);
 
     let mut dhtxx_pin = gpioa.pa1.into_push_pull_output(&mut gpioa.crl);
     let dhtxx_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
