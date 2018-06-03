@@ -104,7 +104,7 @@ fn read_and_send_wind_speed(esp8266: &mut types::EspType, anemometer: &mut types
     let result = anemometer.measure();
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-    communication::encode_i32("wind_raw", (result * 10.) as i32, &mut encoding_buffer)
+    communication::encode_f32("wind_raw", result, &mut encoding_buffer)
         .unwrap();
 
     // let a = 0;

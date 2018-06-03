@@ -1,8 +1,6 @@
-use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};use stm32f103xx_hal::gpio::gpioa::{PA1, CRL};
+use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};
+use stm32f103xx_hal::gpio::gpioa::{PA1, CRL};
 use stm32f103xx_hal::gpio::gpiob::{PB12};
-use stm32f103xx_hal::time::{MonoTimer, Hertz};
-use stm32f103xx_hal::timer::Timer;
-use stm32f103xx::TIM4;
 use hal::prelude::*;
 
 use embedded_hal_time::{RealCountDown, Microsecond, Millisecond};
