@@ -37,6 +37,7 @@ use stm32f103xx_hal::time::{Hertz, MonoTimer};
 use stm32f103xx_hal::timer::Timer;
 use stm32f103xx_hal::gpio::gpioa::{CRL};
 use stm32f103xx_hal::gpio::gpiob;
+use stm32f103xx::TIM4;
 use embedded_hal_time::{RealCountDown, Microsecond, Second};
 
 mod serial;
@@ -47,10 +48,13 @@ mod api;
 mod dhtxx;
 mod types;
 
+const READ_INTERVAL: Second = Second(10);
+
 entry!(main);
 
 fn main() -> ! {
     let p = stm32f103xx::Peripherals::take().unwrap();
+    let cp = stm32f103xx::CorePeripherals::take().unwrap();
 
     let mut flash = p.FLASH.constrain();
     let mut rcc = p.RCC.constrain();
@@ -84,23 +88,33 @@ fn main() -> ! {
     let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(5), 3);
 
     let mut dhtxx_pin = gpioa.pa1.into_push_pull_output(&mut gpioa.crl);
-    let dhtxx_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
-    let mut dhtxx = dhtxx::Dhtxx::new(dhtxx_timer);
+    let mut dhtxx = dhtxx::Dhtxx::new();
 
     let mut debug_pin = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
     debug_pin.set_high();
 
+    let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
     // esp8266.communicate("+CWJAP?").unwrap();
 
     loop {
-        dhtxx_pin = read_and_send_dht_data(&mut esp8266, &mut dhtxx, dhtxx_pin, &mut gpioa.crl, &mut debug_pin);
+        dhtxx_pin = read_and_send_dht_data(
+            &mut esp8266,
+            &mut dhtxx,
+            dhtxx_pin,
+            &mut gpioa.crl,
+            &mut misc_timer
+        );
         read_and_send_wind_speed(&mut esp8266, &mut anemometer);
-        loop {}
+        
+        loop{}
     }
 }
 
-fn read_and_send_wind_speed(esp8266: &mut types::EspType, anemometer: &mut types::AnemometerType){
+fn read_and_send_wind_speed(
+    esp8266: &mut types::EspType,
+    anemometer: &mut types::AnemometerType
+){
     let result = anemometer.measure();
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
@@ -129,9 +143,9 @@ fn read_and_send_dht_data(
     dht: &mut types::DhtType,
     pin: dhtxx::OutPin,
     crl: &mut CRL,
-    debug_pin: &mut dhtxx::DebugPin
+    timer: &mut Timer<TIM4>
 ) -> dhtxx::OutPin {
-    let (reading, pin) = dht.make_reading(pin, crl, debug_pin).unwrap();
+    let (reading, pin) = dht.make_reading(pin, crl, timer).unwrap();
 
     {
         let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();

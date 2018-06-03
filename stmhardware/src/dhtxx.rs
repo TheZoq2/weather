@@ -2,13 +2,13 @@ use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};
 use stm32f103xx_hal::gpio::gpioa::{PA1, CRL};
 use stm32f103xx_hal::gpio::gpiob::{PB12};
 use hal::prelude::*;
+use hal::digital::InputPin;
 
 use embedded_hal_time::{RealCountDown, Microsecond, Millisecond};
 
 const TIMEOUT_PADDING: u32 = 5;
 
 pub type OutPin = PA1<Output<PushPull>>;
-pub type DebugPin = PB12<Output<PushPull>>;
 type InPin = PA1<Input<Floating>>;
 
 #[derive(Debug)]
@@ -18,59 +18,54 @@ pub enum Error {
     IncorrectParity
 }
 
-pub struct Dhtxx<T> 
-where
-    T: RealCountDown<Microsecond> + RealCountDown<Millisecond>
-{
-    countdown_timer: T
-}
+pub struct Dhtxx {}
 
 pub struct Reading {
     pub temperature: f32,
     pub humidity: f32
 }
 
-impl<T> Dhtxx<T>
-where
-    T: RealCountDown<Microsecond> + RealCountDown<Millisecond>
+
+pub trait DhtTimer: RealCountDown<Microsecond> + RealCountDown<Millisecond> { }
+impl<T> DhtTimer for T where T: RealCountDown<Microsecond> + RealCountDown<Millisecond> {}
+
+impl Dhtxx
 {
-    pub fn new(countdown_timer: T) -> Self {
-        Self {countdown_timer}
+    pub fn new() -> Self {
+        Self {}
     }
 
-    pub fn make_reading(&mut self, mut pin: OutPin, pin_ctrl: &mut CRL, debug_pin: &mut DebugPin)
+    pub fn make_reading(&mut self, mut pin: OutPin, pin_ctrl: &mut CRL, timer: &mut impl DhtTimer)
         -> Result<(Reading, OutPin), Error>
     {
         // Set low for 18 ms
         pin.set_low();
-        self.wait_for_ms(Millisecond(18));
+        wait_for_ms(Millisecond(18), timer);
         // Pull up voltage, wait for 20us
         let pin = pin.into_floating_input(pin_ctrl);
         // Wait for input to go low. 20us timeout
-        self.wait_for_pin_with_timeout(&pin, false, Microsecond(40 + TIMEOUT_PADDING))?;
-        debug_pin.set_low();
+        wait_for_pin_with_timeout(&pin, false, Microsecond(40 + TIMEOUT_PADDING), timer)?;
         // // Wait for high in 80 us
-        self.wait_for_pin_with_timeout(&pin, true, Microsecond(80 + TIMEOUT_PADDING))?;
-        debug_pin.set_high();
+        wait_for_pin_with_timeout(&pin, true, Microsecond(80 + TIMEOUT_PADDING), timer)?;
         // // Wait for low in 80 us
-        self.wait_for_pin_with_timeout(&pin, false, Microsecond(80 + TIMEOUT_PADDING))?;
-        debug_pin.set_low();
+        wait_for_pin_with_timeout(&pin, false, Microsecond(80 + TIMEOUT_PADDING), timer)?;
         // Start of actual data
-        let data = self.read_data(&pin)?;
+        let data = self.read_data(&pin, timer)?;
 
         let reading = decode_dht_data(&data)?;
-        // XXX Sleep for a while to allow debugging
+
         let pin = pin.into_push_pull_output(pin_ctrl);
         Ok((reading, pin.into_push_pull_output(pin_ctrl)))
     }
 
-    fn read_data(&mut self, pin: &InPin) -> Result<[u8; 5], Error> {
+    fn read_data(&mut self, pin: &InPin, timer: &mut impl DhtTimer) -> Result<[u8; 5], Error> 
+    {
         let mut data = [0;5];
 
         for byte in 0..5 {
             for _ in 0..8 {
                 // Wait for the pin to go high
-                match self.wait_for_pin_with_timeout(&pin, true, Microsecond(50 + TIMEOUT_PADDING)) {
+                match wait_for_pin_with_timeout(&pin, true, Microsecond(50 + TIMEOUT_PADDING), timer) {
                     Ok(_) => {},
                     Err(e) => {
                         return Err(e);
@@ -78,11 +73,11 @@ where
                 }
 
                 // Wait for the pin to go low. If it does in 28 us this bit is a 0
-                if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(28)) {
+                if let Ok(_) = wait_for_pin_with_timeout(&pin, false, Microsecond(28), timer) {
                     // data[byte] &= ~(1 << index);
                     data[byte] = data[byte] << 1;
                 }
-                else if let Ok(_) = self.wait_for_pin_with_timeout(&pin, false, Microsecond(70-28)) {
+                else if let Ok(_) = wait_for_pin_with_timeout(&pin, false, Microsecond(70-28), timer) {
                     data[byte] = (data[byte] << 1) | 1;
                 }
                 else {
@@ -92,37 +87,43 @@ where
         }
         Ok(data)
     }
+}
 
-    fn wait_for_pin_with_timeout(
-        &mut self,
-        pin: &InPin,
-        pin_high: bool,
-        timeout: Microsecond,
-    ) -> Result<(), Error> {
-        self.countdown_timer.start_real(timeout);
+fn wait_for_pin_with_timeout<T>(pin: &InPin, pin_high: bool, timeout: Microsecond, timer: &mut T)
+    -> Result<(), Error>
+    where
+        T: DhtTimer,
+{
+    timer.start_real(timeout);
 
-        loop {
-            if pin.is_high() == pin_high {
-                return Ok(());
-            }
-            if self.countdown_timer.wait() == Ok(()) {
-                return Err(Error::Timeout)
-            }
+    loop {
+        if pin.is_high() == pin_high {
+            return Ok(());
+        }
+        if timer.wait() == Ok(()) {
+            return Err(Error::Timeout)
         }
     }
+}
 
-    fn wait_for_us(&mut self, timeout: Microsecond) {
-        self.countdown_timer.start_real(timeout);
 
-        // Result<, !> can be safely unwrapped
-        block!(self.countdown_timer.wait()).unwrap();
-    }
-    fn wait_for_ms(&mut self, timeout: Millisecond) {
-        self.countdown_timer.start_real(timeout);
+fn wait_for_us<T>(timeout: Microsecond, timer: &mut T)
+where
+    T: DhtTimer
+{
+    timer.start_real(timeout);
 
-        // Result<, !> can be safely unwrapped
-        block!(self.countdown_timer.wait()).unwrap();
-    }
+    // Result<, !> can be safely unwrapped
+    block!(timer.wait()).unwrap();
+}
+fn wait_for_ms<T>(timeout: Millisecond, timer: &mut T)
+where
+    T: DhtTimer
+{
+    timer.start_real(timeout);
+
+    // Result<, !> can be safely unwrapped
+    block!(timer.wait()).unwrap();
 }
 
 

@@ -12,4 +12,4 @@ pub type AnemometerType = anemometer::Anemometer<PA0<Input<Floating>>, Timer<TIM
 
 pub type EspType = esp8266::Esp8266<Tx<USART1>, Rx<USART1>, Timer<TIM2>>;
 
-pub type DhtType = dhtxx::Dhtxx<Timer<TIM4>>;
+pub type DhtType = dhtxx::Dhtxx;
