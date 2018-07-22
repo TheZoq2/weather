@@ -106,8 +106,9 @@ fn main() -> ! {
             &mut misc_timer
         );
         read_and_send_wind_speed(&mut esp8266, &mut anemometer);
-        
-        loop{}
+
+        misc_timer.start_real(READ_INTERVAL);
+        block!(misc_timer.wait()).unwrap();
     }
 }
 
