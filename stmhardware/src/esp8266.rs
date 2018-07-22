@@ -114,7 +114,7 @@ where Tx: hal::serial::Write<u8>,
         // Turn off echo on the device and wait for it to process that command
         result.send_at_command("E0")?;
 
-        for _ in 0..3 {
+        for _ in 0..timeout.1 {
             result.timer.start(result.timeout.0);
             block!(result.timer.wait()).unwrap();
         }

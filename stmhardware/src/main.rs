@@ -48,7 +48,9 @@ mod api;
 mod dhtxx;
 mod types;
 
+const IP_ADDRESS: &str = "192.168.8.105";
 const READ_INTERVAL: Second = Second(10);
+
 
 entry!(main);
 
@@ -80,7 +82,8 @@ fn main() -> ! {
     );
     let (tx, rx) = serial.split();
 
-    let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, (Hertz(1), 3)).unwrap();
+    let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, (Hertz(1), 10))
+        .expect("Failed to initialise esp8266");
 
     let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
     // TODO: Use internal pull up instead
@@ -119,12 +122,12 @@ fn read_and_send_wind_speed(
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
     communication::encode_f32("wind_raw", result, &mut encoding_buffer)
-        .unwrap();
+        .expect("Failed to send wind speed");
 
     // let a = 0;
     let send_result = esp8266.send_data(
         esp8266::ConnectionType::Tcp,
-        "192.168.1.5",
+        IP_ADDRESS,
         2000,
         &encoding_buffer
     );
@@ -145,7 +148,7 @@ fn read_and_send_dht_data(
     crl: &mut CRL,
     timer: &mut Timer<TIM4>
 ) -> dhtxx::OutPin {
-    let (reading, pin) = dht.make_reading(pin, crl, timer).unwrap();
+    let (reading, pin) = dht.make_reading(pin, crl, timer).expect("Failed to make dhtxx reading");
 
     {
         let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
@@ -155,7 +158,7 @@ fn read_and_send_dht_data(
         // let a = 0;
         esp8266.send_data(
             esp8266::ConnectionType::Tcp,
-            "192.168.1.5",
+            IP_ADDRESS,
             2000,
             &encoding_buffer
         ).expect("Failed to send temperature reading");
@@ -164,12 +167,12 @@ fn read_and_send_dht_data(
     {
         let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
         communication::encode_f32("humidity", reading.humidity, &mut encoding_buffer)
-            .unwrap();
+            .expect("Failed to send humidity");
 
         // let a = 0;
         esp8266.send_data(
             esp8266::ConnectionType::Tcp,
-            "192.168.1.5",
+            IP_ADDRESS,
             2000,
             &encoding_buffer
         ).expect("Failed to send humidity reading");
