@@ -92,6 +92,7 @@ impl Anemometer {
                 })
             })
         };
+
         let arm_holes = (0..3).fold(scad!(Union), |mut acc, i| {
             let angle = (i as f32) * 360./3.;
             acc.add_child(scad!(Rotate(angle, vec3(0., 0., 1.)); {
@@ -130,10 +131,13 @@ impl Anemometer {
 
     fn base(&self) -> ScadObject {
         let padding = 0.5;
-        let thickness = 5.;
+        let thickness = 4.;
         let sensor_top_offset = 0.5;
         let nut_height = 2.5;
         let nut_width = 5.5 + padding;
+
+        let cylinder_radius = 20.;
+        let leg_length = 25.;
 
         let hall_sensor_cutout = {
             let sensor_size = vec3(4.0 + padding, 4., 1.5 + padding);
@@ -163,8 +167,48 @@ impl Anemometer {
             })
         };
 
-        let body = scad!(Cylinder(thickness, Radius(20.)));
-        let screwhole = scad!(Cylinder(thickness, Diameter(self.hub_hole_diameter)));
+        let legs = {
+            let leg_thickness = 5.;
+
+            let base = scad!(Cylinder(leg_length, Radius(cylinder_radius)));
+            let inner_cutout = scad!(Cylinder(leg_length, Radius(cylinder_radius - leg_thickness)));
+
+            let leg_cutout = {
+                let shape = centered_cube(
+                    vec3(cylinder_radius*2. - leg_thickness*2., 100., leg_length),
+                    (true, true, false)
+                );
+                shape
+            };
+
+            let shape = scad!(Difference; {
+                base,
+                inner_cutout,
+                leg_cutout
+            });
+
+            let screwholes = {
+                let shape = scad!(Rotate(90., vec3(0., 1., 0.)); {
+                    centered_cylinder(100., Diameter(3.5))
+                });
+
+                scad!(Translate(vec3(0., 0., 7.)); shape)
+            };
+
+            scad!(Translate(vec3(0., 0., -leg_length)); {
+                scad!(Difference; {
+                    shape,
+                    screwholes
+                })
+            })
+        };
+
+        let body = scad!(Union; {
+            scad!(Cylinder(thickness, Radius(cylinder_radius))),
+            legs
+        });
+
+        let screwhole = scad!(Cylinder(thickness, Diameter(self.hub_hole_diameter - 0.5)));
         scad!(Difference; {
             body,
             screwhole,
