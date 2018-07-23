@@ -1,5 +1,4 @@
-module Main exposing (..)
-
+module Main exposing (..) 
 import Html exposing (..)
 import Html.Attributes
 import Html.Events
@@ -45,15 +44,39 @@ readingProperties name =
             , unitName = ""
             , graphHeight = 50
             }
+
+        minMaxWithLimits : Float -> List (Time, Float) -> (Float, Float) 
+        minMaxWithLimits minRange values =
+            let
+                min = Maybe.withDefault 0 <| List.minimum <| List.map Tuple.second <| values
+                max = Maybe.withDefault 0 <| List.maximum <| List.map Tuple.second <| values
+
+                range = max-min
+                padding = (range-minRange) / 2
+            in
+                (min-padding, max+padding)
+
+
+        independent minRange unitName separation =
+            { valueRangeFn = minMaxWithLimits minRange
+            , preprocessor = (\list -> list)
+            , separation = separation
+            , unitName = unitName
+            , graphHeight = 250
+            }
+
     in
         case name of
             "channel1" -> binaryReading
             "channel2" -> binaryReading
+            "humidity" -> independent 10 "%" 10
+            "temperature" -> independent 10 "°C" 5
+            "wind_raw" -> independent 0.5 "ve" 0.1
             _ ->
-                { valueRangeFn = (\_ -> (-15, 40))
+                { valueRangeFn = (\_ -> (0, 100))
                 , preprocessor = (\list -> list)
                 , separation = 5
-                , unitName = "°C"
+                , unitName = "-"
                 , graphHeight = 300
                 }
 
@@ -155,7 +178,7 @@ drawValues values =
     let
         graphParamFn : ReadingProperty -> List (Time, Float) -> GraphParams
         graphParamFn readingProperty values =
-            GraphParams 600 readingProperty.graphHeight (readingProperty.valueRangeFn values) readingProperty.separation
+            GraphParams 600 readingProperty.graphHeight (readingProperty.valueRangeFn values) readingProperty.separation readingProperty.unitName
     in
         List.map
             (\(name, values) ->
@@ -180,10 +203,11 @@ type alias GraphParams =
     , viewHeight: Int
     , valueRange: (Float, Float)
     , horizontalStep: Float
+    , unit: String
     }
 
 drawGraph : GraphParams ->  List (Time, Float) -> List (Html Msg)
-drawGraph {viewWidth, viewHeight, valueRange, horizontalStep} values =
+drawGraph {viewWidth, viewHeight, valueRange, horizontalStep, unit} values =
     let
         viewDimensions = (viewWidth, viewHeight)
     in
@@ -192,7 +216,7 @@ drawGraph {viewWidth, viewHeight, valueRange, horizontalStep} values =
           , width <| toString 40 ++ "px"
           , height <| toString viewHeight ++ "px"
           ]
-          [ Graph.drawLegend "°C" viewHeight valueRange horizontalStep
+          [ Graph.drawLegend unit viewHeight valueRange horizontalStep
           ]
         , svg
           [ viewBox <| "0 0 " ++ (toString viewWidth) ++ " " ++ (toString viewHeight)
