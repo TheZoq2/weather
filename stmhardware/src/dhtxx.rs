@@ -1,5 +1,5 @@
 use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};
-use stm32f103xx_hal::gpio::gpioa::{PA1, CRL};
+use stm32f103xx_hal::gpio::gpioa::{PA0, CRL};
 use stm32f103xx_hal::gpio::gpiob::{PB12};
 use hal::prelude::*;
 use hal::digital::InputPin;
@@ -8,8 +8,8 @@ use embedded_hal_time::{RealCountDown, Microsecond, Millisecond};
 
 const TIMEOUT_PADDING: u32 = 5;
 
-pub type OutPin = PA1<Output<PushPull>>;
-type InPin = PA1<Input<Floating>>;
+pub type OutPin = PA0<Output<PushPull>>;
+type InPin = PA0<Input<Floating>>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -54,7 +54,8 @@ impl Dhtxx
 
         let reading = decode_dht_data(&data)?;
 
-        let pin = pin.into_push_pull_output(pin_ctrl);
+        let mut pin = pin.into_push_pull_output(pin_ctrl);
+        pin.set_high();
         Ok((reading, pin.into_push_pull_output(pin_ctrl)))
     }
 

@@ -87,10 +87,10 @@ fn main() -> ! {
 
     let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
     // TODO: Use internal pull up instead
-    let ane_pin = gpioa.pa0.into_floating_input(&mut gpioa.crl);
-    let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(5), 3);
+    let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
+    let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
 
-    let mut dhtxx_pin = gpioa.pa1.into_push_pull_output(&mut gpioa.crl);
+    let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
     let mut dhtxx = dhtxx::Dhtxx::new();
 
     let mut debug_pin = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
