@@ -3,6 +3,8 @@ extern crate scad_generator;
 extern crate scad_util;
 use scad_generator::*;
 
+use scad_util::compositions::object_at_corners;
+use scad_util::constants::{x_axis, z_axis};
 
 qstruct!(Anemometer() {
     ball_radius: f32 = 20.,
@@ -218,6 +220,85 @@ impl Anemometer {
     }
 }
 
+qstruct!(Housing() {
+    pcb_x_size: f32 = 70.,
+    pcb_y_size: f32 = 25.,
+    pcb_z_size: f32 = 90.,
+    wall_thickness: f32 = 4.,
+
+    outer_x_size: f32 = pcb_x_size + wall_thickness,
+    outer_z_size: f32 = pcb_z_size + wall_thickness,
+});
+
+impl Housing {
+    fn assembly(&self) -> ScadObject {
+        scad!(Union; {
+            self.watertight_section()
+        })
+    }
+
+    fn watertight_section(&self) -> ScadObject {
+        // Sizes
+        let back_thickness = 6.;
+        let pcb_screwhole_diameter = 3.;
+        let pcb_screwhole_depth = back_thickness - 1.;
+
+        let mount_screwhole_x_separation = 50.;
+        let mount_screwhole_z_separation = 50.;
+        let mount_screwhole_diameter = 3.;
+        let mount_screwhole_depth = back_thickness - 1.;
+
+        let object_at_pcb_holes = |object: ScadObject| {
+            let x_distance = 62.;
+            let z_distance = 80.;
+
+            object_at_corners(x_axis(), z_axis(), x_distance, z_distance, object)
+        };
+
+        // Componnents
+        let outer = centered_cube(
+            vec3(self.outer_x_size, self.pcb_y_size + back_thickness, self.outer_z_size),
+            (true, false, true)
+        );
+
+        let cutout = {
+            let shape = centered_cube(
+                vec3(self.pcb_x_size, self.pcb_y_size, self.pcb_z_size),
+                (true, false, true)
+            );
+            scad!(Translate(vec3(0., back_thickness, 0.)); shape)
+        };
+
+        let pcb_screwholes = {
+            let shape = scad!(Cylinder(pcb_screwhole_depth, Diameter(pcb_screwhole_diameter)));
+            let rotated = scad!(Rotate(-90., vec3(1., 0., 0.)); shape);
+
+            scad!(Translate(vec3(0., back_thickness - pcb_screwhole_depth, 0.)); object_at_pcb_holes(rotated))
+        };
+
+        let mount_screwholes = {
+            let shape = scad!(Cylinder(
+                mount_screwhole_depth,
+                Diameter(mount_screwhole_diameter)
+            ));
+            object_at_corners(
+                x_axis(),
+                z_axis(),
+                mount_screwhole_x_separation,
+                mount_screwhole_z_separation,
+                scad!(Rotate(90., x_axis()); shape)
+            )
+        };
+
+        scad!(Difference; {
+            outer,
+            cutout,
+            pcb_screwholes,
+            mount_screwholes
+        })
+    }
+}
+
 fn save_file(filename: &str, object: ScadObject) {
     let mut sfile = ScadFile::new();
 
@@ -233,4 +314,5 @@ fn main() {
     save_file("arm.scad", anemometer.arm());
     save_file("hub.scad", anemometer.hub());
     save_file("anemometer_base.scad", anemometer.base());
+    save_file("housingAssembly.scad", Housing::new().assembly())
 }

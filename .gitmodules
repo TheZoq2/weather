@@ -1,3 +1,6 @@
 [submodule "server/frontend/graph"]
 	path = server/frontend/graph
 	url = git@github.com:TheZoq2/elm-graph.git
+[submodule "models/scad_util"]
+	path = models/scad_util
+	url = git@github.com:TheZoq2/Rust-scad-util.git
