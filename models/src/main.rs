@@ -228,6 +228,9 @@ qstruct!(Housing() {
 
     outer_x_size: f32 = pcb_x_size + wall_thickness,
     outer_z_size: f32 = pcb_z_size + wall_thickness,
+
+    outer_screwhead_diameter: f32 = 6.5,
+    outer_screwhole_thread_diameter: f32 = 3.,
 });
 
 impl Housing {
@@ -242,6 +245,7 @@ impl Housing {
         let back_thickness = 6.;
         let pcb_screwhole_diameter = 3.;
         let pcb_screwhole_depth = back_thickness - 1.;
+        let y_size = self.pcb_y_size + back_thickness;
 
         let mount_screwhole_x_separation = 50.;
         let mount_screwhole_z_separation = 50.;
@@ -257,7 +261,7 @@ impl Housing {
 
         // Componnents
         let outer = centered_cube(
-            vec3(self.outer_x_size, self.pcb_y_size + back_thickness, self.outer_z_size),
+            vec3(self.outer_x_size, y_size, self.outer_z_size),
             (true, false, true)
         );
 
@@ -290,12 +294,38 @@ impl Housing {
             )
         };
 
+        let outer_screwholes = {
+            let outer_shape = centered_cube(
+                vec3(self.outer_screwhead_diameter, y_size, self.outer_screwhead_diameter),
+                (true, false, true)
+            );
+            let cutout = {
+                let shape = scad!(Cylinder(y_size, Diameter(self.outer_screwhole_thread_diameter)));
+                scad!(Rotate(-90., x_axis()); shape)
+            };
+
+            self.object_at_outer_screwholes(scad!(Difference; { outer_shape, cutout }))
+        };
+
         scad!(Difference; {
-            outer,
+            scad!(Union; {
+                outer,
+                outer_screwholes
+            }),
             cutout,
             pcb_screwholes,
             mount_screwholes
         })
+    }
+
+    fn object_at_outer_screwholes(&self, object: ScadObject) -> ScadObject {
+        object_at_corners(
+            x_axis(),
+            z_axis(),
+            self.outer_x_size + self.outer_screwhead_diameter,
+            self.outer_z_size - self.outer_screwhead_diameter,
+            object
+        )
     }
 }
 
