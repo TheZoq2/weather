@@ -132,6 +132,29 @@ impl Anemometer {
         )
     }
 
+    pub fn hall_sensor_cutout(&self) -> ScadObject {
+        let padding = 0.5;
+        let sensor_size = vec3(4.0 + padding, 4., 1.5 + padding);
+        let wire_hole_length = 5.;
+        let thickness = 4.;
+
+        let sensor_hole = centered_cube(sensor_size, (true, true, false));
+        let wire_hole = {
+            let shape = centered_cube(
+                sensor_size + vec3(0.,wire_hole_length,thickness),
+                (true, false, false)
+            );
+            scad!(Translate(vec3(0., sensor_size.y/2., -thickness)); {
+                shape
+            })
+        };
+
+        scad!(Translate(vec3(0., 0., -sensor_size.z)); {
+            sensor_hole,
+            wire_hole
+        })
+    }
+
     fn base(&self) -> ScadObject {
         let padding = 0.5;
         let thickness = 4.;
@@ -142,26 +165,7 @@ impl Anemometer {
         let cylinder_radius = 20.;
         let leg_length = 25.;
 
-        let hall_sensor_cutout = {
-            let sensor_size = vec3(4.0 + padding, 4., 1.5 + padding);
-            let wire_hole_length = 5.;
-
-            let sensor_hole = centered_cube(sensor_size, (true, true, false));
-            let wire_hole = {
-                let shape = centered_cube(
-                    sensor_size + vec3(0.,wire_hole_length,thickness),
-                    (true, false, false)
-                );
-                scad!(Translate(vec3(0., sensor_size.y/2., -thickness)); {
-                    shape
-                })
-            };
-
-            scad!(Translate(vec3(0., 0., -sensor_size.z)); {
-                sensor_hole,
-                wire_hole
-            })
-        };
+        let hall_sensor_cutout = self.hall_sensor_cutout();
 
         let translated_hall_sensor = {
             let xy = self.magnet_hole_offset;
@@ -243,7 +247,8 @@ impl Housing {
     fn assembly(&self) -> ScadObject {
         scad!(Union; {
             self.watertight_section(),
-            scad!(Translate(vec3(0., 55., 0.)); self.water_seal())
+            scad!(Translate(vec3(0., 55., 0.)); self.water_seal()),
+            scad!(Translate(vec3(0., 80., 0.)); self.sensor_section())
         })
     }
 
@@ -374,6 +379,40 @@ impl Housing {
                 outer,
                 outer_box
             }),
+            cutout
+        })
+    }
+
+    pub fn sensor_section(&self) -> ScadObject {
+        let inner_y_size = 15.;
+        let back_thickness = self.wall_thickness;
+        let screwhole_height = 4.;
+        let y_size = inner_y_size + screwhole_height;
+        let chin_size = 8.;
+
+        let outer = {
+            let with_screwholes = self.outer_shape(self.outer_screwhole_diameter, screwhole_height);
+            let rest = centered_cube(
+                vec3(self.outer_x_size, y_size - screwhole_height, self.outer_z_size),
+                (true, false, true)
+            );
+            scad!(Union; {
+                with_screwholes,
+                rest,
+            })
+        };
+
+        let cutout = {
+            let shape = centered_cube(
+                vec3(self.pcb_x_size, inner_y_size, self.outer_z_size - chin_size),
+                (true, false, true)
+            );
+
+            scad!(Translate(vec3(0., back_thickness, 0.)); shape)
+        };
+
+        scad!(Difference; {
+            outer,
             cutout
         })
     }
