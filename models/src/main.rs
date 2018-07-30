@@ -5,6 +5,7 @@ use scad_generator::*;
 
 use scad_util::compositions::object_at_corners;
 use scad_util::constants::{x_axis, z_axis};
+use scad_util::shapes::cut_triangle;
 
 qstruct!(Anemometer() {
     ball_radius: f32 = 20.,
@@ -231,12 +232,44 @@ qstruct!(Housing() {
 
     outer_screwhead_diameter: f32 = 6.5,
     outer_screwhole_thread_diameter: f32 = 3.,
+    outer_screwhole_diameter: f32 = 3.7,
+
+    battery_mount_lower_len: f32 = 15.,
+    battery_mount_upper_len: f32 = 20.,
+    battery_mount_z_len: f32 = 5.,
 });
 
 impl Housing {
     fn assembly(&self) -> ScadObject {
         scad!(Union; {
-            self.watertight_section()
+            self.watertight_section(),
+            scad!(Translate(vec3(0., 55., 0.)); self.water_seal())
+        })
+    }
+
+    fn outer_shape(&self, screwhole_diameter: f32, y_size: f32) -> ScadObject {
+        // Componnents
+        let outer = centered_cube(
+            vec3(self.outer_x_size, y_size, self.outer_z_size),
+            (true, false, true)
+        );
+
+        let outer_screwholes = {
+            let outer_shape = centered_cube(
+                vec3(self.outer_screwhead_diameter, y_size, self.outer_screwhead_diameter),
+                (true, false, true)
+            );
+            let cutout = {
+                let shape = scad!(Cylinder(y_size, Diameter(screwhole_diameter)));
+                scad!(Rotate(-90., x_axis()); shape)
+            };
+
+            self.object_at_outer_screwholes(scad!(Difference; { outer_shape, cutout }))
+        };
+
+        scad!(Union; {
+            outer,
+            outer_screwholes
         })
     }
 
@@ -247,10 +280,10 @@ impl Housing {
         let pcb_screwhole_depth = back_thickness - 1.;
         let y_size = self.pcb_y_size + back_thickness;
 
-        let mount_screwhole_x_separation = 50.;
-        let mount_screwhole_z_separation = 50.;
         let mount_screwhole_diameter = 3.;
         let mount_screwhole_depth = back_thickness - 1.;
+        let mount_screwhole_x_separation = 50.;
+        let mount_screwhole_z_separation = 50.;
 
         let object_at_pcb_holes = |object: ScadObject| {
             let x_distance = 62.;
@@ -258,12 +291,6 @@ impl Housing {
 
             object_at_corners(x_axis(), z_axis(), x_distance, z_distance, object)
         };
-
-        // Componnents
-        let outer = centered_cube(
-            vec3(self.outer_x_size, y_size, self.outer_z_size),
-            (true, false, true)
-        );
 
         let cutout = {
             let shape = centered_cube(
@@ -290,27 +317,27 @@ impl Housing {
                 z_axis(),
                 mount_screwhole_x_separation,
                 mount_screwhole_z_separation,
-                scad!(Rotate(90., x_axis()); shape)
+                scad!(Rotate(-90., x_axis()); shape)
             )
         };
 
-        let outer_screwholes = {
-            let outer_shape = centered_cube(
-                vec3(self.outer_screwhead_diameter, y_size, self.outer_screwhead_diameter),
-                (true, false, true)
+        let battery_mount = {
+            let shape = cut_triangle(
+                self.battery_mount_lower_len,
+                self.battery_mount_upper_len,
+                self.battery_mount_z_len,
+                y_size
             );
-            let cutout = {
-                let shape = scad!(Cylinder(y_size, Diameter(self.outer_screwhole_thread_diameter)));
-                scad!(Rotate(-90., x_axis()); shape)
-            };
 
-            self.object_at_outer_screwholes(scad!(Difference; { outer_shape, cutout }))
+            let offset = self.outer_z_size / 2.;
+
+            scad!(Translate(vec3(0., 0., -offset)); scad!(Rotate(-90., x_axis()); shape))
         };
 
         scad!(Difference; {
             scad!(Union; {
-                outer,
-                outer_screwholes
+                self.outer_shape(self.outer_screwhole_thread_diameter, y_size),
+                battery_mount
             }),
             cutout,
             pcb_screwholes,
@@ -326,6 +353,29 @@ impl Housing {
             self.outer_z_size - self.outer_screwhead_diameter,
             object
         )
+    }
+
+    pub fn water_seal(&self) -> ScadObject {
+        let thickness = 2.;
+        let height = 6.;
+
+        let outer = self.outer_shape(self.outer_screwhole_diameter, thickness);
+        let outer_box = centered_cube(
+            vec3(self.pcb_x_size, height, self.pcb_z_size),
+            (true, false, true)
+        );
+        let cutout = centered_cube(
+            vec3(self.pcb_x_size - thickness, height, self.pcb_z_size - thickness),
+            (true, false, true)
+        );
+
+        scad!(Difference; {
+            scad!(Union; {
+                outer,
+                outer_box
+            }),
+            cutout
+        })
     }
 }
 
@@ -344,5 +394,6 @@ fn main() {
     save_file("arm.scad", anemometer.arm());
     save_file("hub.scad", anemometer.hub());
     save_file("anemometer_base.scad", anemometer.base());
-    save_file("housingAssembly.scad", Housing::new().assembly())
+    save_file("housingAssembly.scad", Housing::new().assembly());
+    save_file("waterSeal.scad", Housing::new().water_seal());
 }
