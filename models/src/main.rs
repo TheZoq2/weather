@@ -226,21 +226,26 @@ impl Anemometer {
 }
 
 qstruct!(Housing() {
-    pcb_x_size: f32 = 70.,
+    pcb_padding: f32 = 4.,
+    pcb_x_size: f32 = 70. +  pcb_padding,
     pcb_y_size: f32 = 25.,
-    pcb_z_size: f32 = 90.,
+    pcb_z_size: f32 = 90. + pcb_padding,
     wall_thickness: f32 = 4.,
 
     outer_x_size: f32 = pcb_x_size + wall_thickness,
     outer_z_size: f32 = pcb_z_size + wall_thickness,
 
-    outer_screwhead_diameter: f32 = 6.5,
-    outer_screwhole_thread_diameter: f32 = 3.,
-    outer_screwhole_diameter: f32 = 3.7,
+    screwhead_diameter: f32 = 6.5,
+    screwhole_thread_diameter: f32 = 3.,
+    screwhole_diameter: f32 = 3.7,
 
     battery_mount_lower_len: f32 = 15.,
     battery_mount_upper_len: f32 = 20.,
     battery_mount_z_len: f32 = 5.,
+
+    wire_hole_diameter: f32 = 15.,
+
+    grid_mount_hole_padding: f32 = 6.,
 });
 
 impl Housing {
@@ -248,7 +253,9 @@ impl Housing {
         scad!(Union; {
             self.watertight_section(),
             scad!(Translate(vec3(0., 55., 0.)); self.water_seal()),
-            scad!(Translate(vec3(0., 80., 0.)); self.sensor_section())
+            scad!(Translate(vec3(0., 80., 0.)); self.sensor_section()),
+            scad!(Translate(vec3(0., 90., 0.)); self.wire_hole_water_seal(2.)),
+            scad!(Translate(vec3(0., 100., 0.)); self.wire_hole_cover()),
         })
     }
 
@@ -261,7 +268,7 @@ impl Housing {
 
         let outer_screwholes = {
             let outer_shape = centered_cube(
-                vec3(self.outer_screwhead_diameter, y_size, self.outer_screwhead_diameter),
+                vec3(self.screwhead_diameter, y_size, self.screwhead_diameter),
                 (true, false, true)
             );
             let cutout = {
@@ -341,7 +348,7 @@ impl Housing {
 
         scad!(Difference; {
             scad!(Union; {
-                self.outer_shape(self.outer_screwhole_thread_diameter, y_size),
+                self.outer_shape(self.screwhole_thread_diameter, y_size),
                 battery_mount
             }),
             cutout,
@@ -354,17 +361,24 @@ impl Housing {
         object_at_corners(
             x_axis(),
             z_axis(),
-            self.outer_x_size + self.outer_screwhead_diameter,
-            self.outer_z_size - self.outer_screwhead_diameter,
+            self.outer_x_size + self.screwhead_diameter,
+            self.outer_z_size - self.screwhead_diameter,
             object
         )
+    }
+
+    fn object_at_wire_hole_screwholes(&self, object: ScadObject) -> ScadObject {
+        let padding = 5.;
+        let distance = self.wire_hole_diameter + padding;
+
+        object_at_corners(x_axis(), z_axis(), distance, distance, object)
     }
 
     pub fn water_seal(&self) -> ScadObject {
         let thickness = 2.;
         let height = 6.;
 
-        let outer = self.outer_shape(self.outer_screwhole_diameter, thickness);
+        let outer = self.outer_shape(self.screwhole_diameter, thickness);
         let outer_box = centered_cube(
             vec3(self.pcb_x_size, height, self.pcb_z_size),
             (true, false, true)
@@ -383,6 +397,37 @@ impl Housing {
         })
     }
 
+    pub fn wire_hole_water_seal(&self, thickness: f32) -> ScadObject {
+        let shape = {
+            let corner_shape = scad!(Rotate(-90., x_axis()); {
+                scad!(Cylinder(thickness, Diameter(self.screwhead_diameter)))
+            });
+            scad!(Hull; self.object_at_wire_hole_screwholes(corner_shape))
+        };
+
+        let screwholes = self.object_at_wire_hole_screwholes(
+                scad!(Rotate(-90., x_axis()); {
+                    scad!(Cylinder(thickness, Diameter(self.screwhole_diameter)))
+                })
+            );
+
+        scad!(Difference; {
+            shape,
+            screwholes
+        })
+    }
+
+    pub fn wire_hole_cover(&self) -> ScadObject {
+        let thickness = 4.;
+        scad!(Difference; {
+            self.wire_hole_water_seal(thickness),
+            centered_cube(
+                vec3(self.wire_hole_diameter, thickness, self.wire_hole_diameter),
+                (true, false, false)
+            ),
+        })
+    }
+
     pub fn sensor_section(&self) -> ScadObject {
         let inner_y_size = 15.;
         let back_thickness = self.wall_thickness;
@@ -391,15 +436,31 @@ impl Housing {
         let chin_size = 8.;
 
         let outer = {
-            let with_screwholes = self.outer_shape(self.outer_screwhole_diameter, screwhole_height);
+            let with_screwholes = self.outer_shape(self.screwhole_diameter, screwhole_height);
             let rest = centered_cube(
                 vec3(self.outer_x_size, y_size - screwhole_height, self.outer_z_size),
                 (true, false, true)
             );
+
             scad!(Union; {
                 with_screwholes,
                 rest,
             })
+        };
+
+        let wire_hole = {
+            let main_cutout = centered_cube(
+                vec3(self.wire_hole_diameter, back_thickness, self.wire_hole_diameter),
+                (true, false, true)
+            );
+
+            let holes = self.object_at_wire_hole_screwholes(
+                scad!(Rotate(-90., x_axis()); {
+                    scad!(Cylinder(back_thickness, Diameter(self.screwhole_thread_diameter)))
+                })
+            );
+
+            scad!(Union; {main_cutout, holes})
         };
 
         let cutout = {
@@ -411,11 +472,53 @@ impl Housing {
             scad!(Translate(vec3(0., back_thickness, 0.)); shape)
         };
 
+        let grid_mounting_spots = self.object_at_grid_mounting_holes(
+                centered_cube(
+                    vec3(self.grid_mount_hole_padding, inner_y_size, self.grid_mount_hole_padding),
+                    (true, false, true)
+                )
+            );
+
+        let grid_mounting_holes = {
+            let shape = scad!(Cylinder(inner_y_size, Diameter(self.screwhole_thread_diameter)));
+            let rotated = scad!(Rotate(-90., x_axis()); shape);
+            let translated = scad!(Translate(vec3(0., screwhole_height, 0.)); rotated);
+            self.object_at_grid_mounting_holes(translated)
+        };
+
+        let anemometer_mount = {
+            let anemometer = Anemometer::new();
+
+            let sensor_cutout = anemometer.hall_sensor_cutout();
+            sensor_cutout
+        };
+
         scad!(Difference; {
-            outer,
-            cutout
+            scad!(Union; {
+                scad!(Difference; {
+                    outer,
+                    cutout,
+                    wire_hole,
+                    anemometer_mount
+                }),
+                grid_mounting_spots
+            }),
+            grid_mounting_holes
         })
     }
+
+    pub fn object_at_grid_mounting_holes(&self, object: ScadObject) -> ScadObject {
+        let padding = 6.;
+
+        object_at_corners(
+            x_axis(),
+            z_axis(),
+            self.outer_x_size - padding,
+            self.outer_z_size - padding,
+            object
+        )
+    }
+
 }
 
 fn save_file(filename: &str, object: ScadObject) {
@@ -434,5 +537,8 @@ fn main() {
     save_file("hub.scad", anemometer.hub());
     save_file("anemometer_base.scad", anemometer.base());
     save_file("housingAssembly.scad", Housing::new().assembly());
+    save_file("watertight_section.scad", Housing::new().watertight_section());
     save_file("waterSeal.scad", Housing::new().water_seal());
+    save_file("wire_hole_water_seal.scad", Housing::new().wire_hole_water_seal(2.));
+    save_file("wire_hole_cover.scad", Housing::new().wire_hole_cover());
 }
