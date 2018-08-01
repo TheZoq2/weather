@@ -123,12 +123,11 @@ fn main() -> ! {
 fn read_and_send_wind_speed(
     esp8266: &mut types::EspType,
     anemometer: &mut types::AnemometerType
-){
+) {
     let result = anemometer.measure();
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-    communication::encode_f32("wind_raw", result, &mut encoding_buffer)
-        .expect("Failed to send wind speed");
+    communication::encode_f32("wind_raw", result, &mut encoding_buffer);
 
     // let a = 0;
     let send_result = esp8266.send_data(
@@ -154,36 +153,40 @@ fn read_and_send_dht_data(
     crl: &mut CRL,
     timer: &mut Timer<TIM4>
 ) -> dhtxx::OutPin {
-    let (reading, pin) = dht.make_reading(pin, crl, timer).expect("Failed to make dhtxx reading");
+    // let (reading, pin) = dht.make_reading(pin, crl, timer).expect("Failed to make dhtxx reading");
+    let (pin, reading) = dht.make_reading(pin, crl, timer);
 
-    {
-        let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-        communication::encode_f32("temperature", reading.temperature, &mut encoding_buffer)
-            .expect("Failed to encode temperature");
+    if let Ok(reading) = reading {
+        {
+            let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
+            communication::encode_f32("humidity", reading.humidity, &mut encoding_buffer)
+                .expect("Failed to send humidity");
 
-        // let a = 0;
-        esp8266.send_data(
-            esp8266::ConnectionType::Tcp,
-            IP_ADDRESS,
-            2000,
-            &encoding_buffer
-        ).expect("Failed to send temperature reading");
+            // let a = 0;
+            esp8266.send_data(
+                esp8266::ConnectionType::Tcp,
+                IP_ADDRESS,
+                2000,
+                &encoding_buffer
+            );
+        }
+        {
+            let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
+            communication::encode_f32("temperature", reading.temperature, &mut encoding_buffer)
+                .expect("Failed to encode temperature");
+
+            // let a = 0;
+            esp8266.send_data(
+                esp8266::ConnectionType::Tcp,
+                IP_ADDRESS,
+                2000,
+                &encoding_buffer
+            );
+        }
     }
-
-    {
-        let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-        communication::encode_f32("humidity", reading.humidity, &mut encoding_buffer)
-            .expect("Failed to send humidity");
-
-        // let a = 0;
-        esp8266.send_data(
-            esp8266::ConnectionType::Tcp,
-            IP_ADDRESS,
-            2000,
-            &encoding_buffer
-        ).expect("Failed to send humidity reading");
+    else {
+        asm::bkpt();
     }
-
     pin
 }
 

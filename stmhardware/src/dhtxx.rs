@@ -36,13 +36,25 @@ impl Dhtxx
     }
 
     pub fn make_reading(&mut self, mut pin: OutPin, pin_ctrl: &mut CRL, timer: &mut impl DhtTimer)
-        -> Result<(Reading, OutPin), Error>
+        -> (OutPin, Result<Reading, Error>)
     {
+        self.send_init(&mut pin, timer);
+        let pin = pin.into_floating_input(pin_ctrl);
+
+        let read_result = self.full_read_sequence(&pin, timer);
+
+        let mut pin = pin.into_push_pull_output(pin_ctrl);
+        pin.set_high();
+        (pin, read_result)
+    }
+
+    fn send_init(&self, pin: &mut OutPin, timer: &mut impl DhtTimer) {
         // Set low for 18 ms
         pin.set_low();
         wait_for_ms(Millisecond(18), timer);
-        // Pull up voltage, wait for 20us
-        let pin = pin.into_floating_input(pin_ctrl);
+    }
+
+    fn full_read_sequence(&mut self, pin: &InPin, timer: &mut impl DhtTimer) -> Result<Reading, Error> {
         // Wait for input to go low. 20us timeout
         wait_for_pin_with_timeout(&pin, false, Microsecond(40 + TIMEOUT_PADDING), timer)?;
         // // Wait for high in 80 us
@@ -52,12 +64,9 @@ impl Dhtxx
         // Start of actual data
         let data = self.read_data(&pin, timer)?;
 
-        let reading = decode_dht_data(&data)?;
-
-        let mut pin = pin.into_push_pull_output(pin_ctrl);
-        pin.set_high();
-        Ok((reading, pin.into_push_pull_output(pin_ctrl)))
+        decode_dht_data(&data)
     }
+
 
     fn read_data(&mut self, pin: &InPin, timer: &mut impl DhtTimer) -> Result<[u8; 5], Error> 
     {
