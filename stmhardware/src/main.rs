@@ -62,6 +62,7 @@ fn main() -> ! {
     let mut rcc = p.RCC.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     let mut gpiob = p.GPIOB.split(&mut rcc.apb2);
+    let mut gpioc = p.GPIOC.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
@@ -70,7 +71,11 @@ fn main() -> ! {
     let rx = gpioa.pa10.into_floating_input(&mut gpioa.crh);
 
 
-    let timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
+    let mut timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
+
+    // Allow the esp8266 to initialise
+    timer.start_real(Second(10));
+    block!(timer.wait()).unwrap();
 
     let serial = Serial::usart1(
         p.USART1,
@@ -82,6 +87,9 @@ fn main() -> ! {
     );
     let (tx, rx) = serial.split();
 
+    let mut led_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
+    led_pin.set_high();
+
     let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, (Hertz(1), 10))
         .expect("Failed to initialise esp8266");
 
@@ -92,9 +100,6 @@ fn main() -> ! {
 
     let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
     let mut dhtxx = dhtxx::Dhtxx::new();
-
-    let mut debug_pin = gpiob.pb12.into_push_pull_output(&mut gpiob.crh);
-    debug_pin.set_high();
 
     let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
