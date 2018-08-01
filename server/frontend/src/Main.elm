@@ -13,6 +13,8 @@ import List.Extra
 
 import Graph
 import Time
+import Msg exposing (Msg(..))
+import Requests exposing (sendAvailableDataQuery, sendValueRequest)
 
 type alias ReadingProperty =
     { valueRangeFn: List (Time, Float) -> (Float, Float)
@@ -85,19 +87,15 @@ type alias Model =
     { values: Dict String (List (Time, Float))
     , listedData: List String
     , availableData: List String
+    -- Url of the server
+    , url: String
     }
 
 
 init : (Model, Cmd Msg)
 init =
-    (Model Dict.empty [] [], Cmd.none)
+    ({values = Dict.empty, listedData = [], availableData = [], url = "localhost:8080"}, Cmd.none)
 
-
-type Msg
-    = ValuesReceived String (Result Http.Error (List (Time, Float)))
-    | Tick Time
-    | AvailableDataReceived (Result Http.Error (List String))
-    | ToggleData String
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -117,7 +115,8 @@ update msg model =
                         (model, Cmd.none)
         Tick time ->
             let
-                requests = sendAvailableDataQuery :: (List.map sendValueRequest model.listedData)
+                requests = sendAvailableDataQuery model.url
+                    :: (List.map (sendValueRequest model.url) model.listedData)
             in
                 (model, Cmd.batch requests)
         AvailableDataReceived data ->
@@ -138,31 +137,9 @@ update msg model =
                         name :: model.listedData
             in
                 ({model | listedData = newListed}, Cmd.none)
+        ServerUrlUpdate url ->
+            ({model | url = url}, Cmd.none)
 
-
-decodeTemperatures : Decode.Decoder (List (Time, Float))
-decodeTemperatures =
-    let
-        timestampDecoder = Decode.field "timestamp" (Decode.map ((*) Time.second) Decode.float)
-        valueDecoder = Decode.field "value" Decode.float
-    in
-        Decode.list <| Decode.map2 (,) timestampDecoder valueDecoder
-
-getValues : String -> Http.Request (List (Time, Float))
-getValues name =
-    Http.get ("http://localhost:8080/data/" ++ name) decodeTemperatures
-
-sendValueRequest : String -> Cmd Msg
-sendValueRequest name =
-    Http.send (ValuesReceived name) (getValues name)
-
-getAvailableData : Http.Request (List String)
-getAvailableData =
-    Http.get "http://localhost:8080/data" <| Decode.list Decode.string
-
-sendAvailableDataQuery : Cmd Msg
-sendAvailableDataQuery =
-    Http.send AvailableDataReceived getAvailableData
 
 view : Model -> Html Msg
 view model =
@@ -170,6 +147,7 @@ view model =
         []
         (  [dataSelector model.availableData]
         ++ drawValues model.values
+        ++ [input [Html.Events.onInput ServerUrlUpdate] []]
         )
 
 
