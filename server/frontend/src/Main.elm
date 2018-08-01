@@ -45,6 +45,9 @@ readingProperties name =
             , graphHeight = 50
             }
 
+        lastNValues n list =
+            List.drop ((List.length list) - n) list
+
         minMaxWithLimits : Float -> List (Time, Float) -> (Float, Float) 
         minMaxWithLimits minRange values =
             let
@@ -52,14 +55,14 @@ readingProperties name =
                 max = Maybe.withDefault 0 <| List.maximum <| List.map Tuple.second <| values
 
                 range = max-min
-                padding = (range-minRange) / 2
+                padding = Maybe.withDefault 0 <| List.maximum [0, (minRange - range) / 2]
             in
                 (min-padding, max+padding)
 
 
         independent minRange unitName separation =
             { valueRangeFn = minMaxWithLimits minRange
-            , preprocessor = (\list -> list)
+            , preprocessor = lastNValues (6 * 60)-- (\list -> list)
             , separation = separation
             , unitName = unitName
             , graphHeight = 250
@@ -71,7 +74,7 @@ readingProperties name =
             "channel2" -> binaryReading
             "humidity" -> independent 10 "%" 10
             "temperature" -> independent 10 "°C" 5
-            "wind_raw" -> independent 0.5 "ve" 0.1
+            "wind_raw" -> independent 0.5 "ve" 0.5
             _ ->
                 { valueRangeFn = (\_ -> (0, 100))
                 , preprocessor = (\list -> list)
@@ -186,7 +189,7 @@ drawValues values =
                     readingProperty = readingProperties name
                     processedValues = readingProperty.preprocessor values
 
-                    graphParams = graphParamFn readingProperty values
+                    graphParams = graphParamFn readingProperty processedValues
                 in
                     div
                         []
