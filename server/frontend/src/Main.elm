@@ -10,11 +10,15 @@ import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Dict exposing (Dict)
 import List.Extra
+import Navigation
 
 import Graph
 import Time
 import Msg exposing (Msg(..))
 import Requests exposing (sendAvailableDataQuery, sendValueRequest)
+import Views
+
+import Constants exposing (day)
 
 type alias ReadingProperty =
     { valueRangeFn: List (Time, Float) -> (Float, Float)
@@ -64,7 +68,7 @@ readingProperties name =
 
         independent minRange unitName separation =
             { valueRangeFn = minMaxWithLimits minRange
-            , preprocessor = lastNValues (6 * 60)-- (\list -> list)
+            , preprocessor = identity
             , separation = separation
             , unitName = unitName
             , graphHeight = 250
@@ -92,12 +96,19 @@ type alias Model =
     , availableData: List String
     -- Url of the server
     , url: String
+    , timeRange: Time
     }
 
 
-init : (Model, Cmd Msg)
-init =
-    ({values = Dict.empty, listedData = [], availableData = [], url = "localhost:8080"}, Cmd.none)
+init : Navigation.Location -> (Model, Cmd Msg)
+init location =
+    ( { values = Dict.empty
+      , listedData = []
+      , availableData = []
+      , url = serverUrlFromLocation location
+      , timeRange = day
+      }
+    , Cmd.none)
 
 
 
@@ -133,39 +144,57 @@ update msg model =
                         (model, Cmd.none)
         ToggleData name ->
             let
-                newListed = 
+                (newListed, newValues) =
                     if List.member name model.listedData then
-                        List.filter (\x -> x == name) model.listedData
+                        ( List.filter (\x -> x /= name) model.listedData
+                        , Dict.remove name model.values
+                        )
                     else
-                        name :: model.listedData
+                        (name :: model.listedData, model.values)
             in
-                ({model | listedData = newListed}, Cmd.none)
-        ServerUrlUpdate url ->
-            ({model | url = url}, Cmd.none)
+                ({model | listedData = newListed, values = newValues}, Cmd.none)
+        UrlChanged location ->
+            let
+                _ = Debug.log "location.hash" location.hash
+            in
+                ({model | url = serverUrlFromLocation location}, Cmd.none)
+        TimeRangeChanged time ->
+            ({model | timeRange = time}, Cmd.none)
 
 
 view : Model -> Html Msg
 view model =
     div
         []
-        (  [dataSelector model.availableData]
-        ++ drawValues model.values
-        ++ [input [Html.Events.onInput ServerUrlUpdate] []]
+        (  [ dataSelector model.availableData
+           , Views.timeSelectionButtons
+           ]
+        ++ drawValues model.timeRange model.values
         )
 
 
-drawValues : Dict String (List (Time, Float)) -> List (Html Msg)
-drawValues values =
+drawValues : Time -> Dict String (List (Time, Float)) -> List (Html Msg)
+drawValues timeRange values =
     let
         graphParamFn : ReadingProperty -> List (Time, Float) -> GraphParams
         graphParamFn readingProperty values =
             GraphParams 600 readingProperty.graphHeight (readingProperty.valueRangeFn values) readingProperty.separation readingProperty.unitName
+
     in
         List.map
             (\(name, values) ->
                 let
+                    maxTime = List.map Tuple.first values |> List.maximum |> Maybe.withDefault 0
+                    minTime = maxTime - timeRange
+                    startEndTime = (minTime, maxTime)
+
+                    filter (time, val) = 
+                        (time <= maxTime && time >= minTime)
+
+                    displayedValues = List.filter filter values
+
                     readingProperty = readingProperties name
-                    processedValues = readingProperty.preprocessor values
+                    processedValues = readingProperty.preprocessor displayedValues
 
                     graphParams = graphParamFn readingProperty processedValues
                 in
@@ -173,7 +202,7 @@ drawValues values =
                         []
                         ( [ p [] [Html.text name]
                           ]
-                          ++ (drawGraph graphParams processedValues)
+                          ++ (drawGraph graphParams startEndTime processedValues)
                         )
             )
             <| Dict.toList values
@@ -187,8 +216,8 @@ type alias GraphParams =
     , unit: String
     }
 
-drawGraph : GraphParams ->  List (Time, Float) -> List (Html Msg)
-drawGraph {viewWidth, viewHeight, valueRange, horizontalStep, unit} values =
+drawGraph : GraphParams -> (Time, Time) -> List (Time, Float) ->  List (Html Msg)
+drawGraph {viewWidth, viewHeight, valueRange, horizontalStep, unit} startEndTime values =
     let
         viewDimensions = (viewWidth, viewHeight)
     in
@@ -205,7 +234,7 @@ drawGraph {viewWidth, viewHeight, valueRange, horizontalStep, unit} values =
           , height <| toString viewHeight ++ "px"
           ]
           [ Graph.drawHorizontalLines viewDimensions valueRange horizontalStep
-          , Graph.drawGraph viewDimensions valueRange values
+          , Graph.drawGraph viewDimensions valueRange startEndTime values
           ]
         ]
 
@@ -218,7 +247,11 @@ dataSelector availableData =
     in
         li [] links
 
-
+serverUrlFromLocation : Navigation.Location -> String
+serverUrlFromLocation location =
+    case String.uncons location.hash of
+        Just (hash, url) -> url
+        Nothing -> "localhost:8080"
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
@@ -227,7 +260,8 @@ subscriptions model =
 
 main : Program Never Model Msg
 main =
-    Html.program
+    Navigation.program
+        UrlChanged
         { init = init
         , update = update
         , view = view
