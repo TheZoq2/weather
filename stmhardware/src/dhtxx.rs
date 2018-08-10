@@ -1,15 +1,19 @@
 use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};
-use stm32f103xx_hal::gpio::gpioa::{PA0, CRL};
+use stm32f103xx_hal::gpio::gpioa::{PA0, PA2, CRL};
 use stm32f103xx_hal::gpio::gpiob::{PB12};
 use hal::prelude::*;
 use hal::digital::InputPin;
 
+use cortex_m::asm;
+
 use embedded_hal_time::{RealCountDown, Microsecond, Millisecond};
 
-const TIMEOUT_PADDING: u32 = 5;
+const TIMEOUT_PADDING: u32 = 10;
 
 pub type OutPin = PA0<Output<PushPull>>;
 type InPin = PA0<Input<Floating>>;
+
+pub type DebugPin = PA2<Output<PushPull>>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -35,13 +39,13 @@ impl Dhtxx
         Self {}
     }
 
-    pub fn make_reading(&mut self, mut pin: OutPin, pin_ctrl: &mut CRL, timer: &mut impl DhtTimer)
+    pub fn make_reading(&mut self, mut pin: OutPin, pin_ctrl: &mut CRL, timer: &mut impl DhtTimer, debug_pin: &mut DebugPin)
         -> (OutPin, Result<Reading, Error>)
     {
         self.send_init(&mut pin, timer);
         let pin = pin.into_floating_input(pin_ctrl);
 
-        let read_result = self.full_read_sequence(&pin, timer);
+        let read_result = self.full_read_sequence(&pin, timer, debug_pin);
 
         let mut pin = pin.into_push_pull_output(pin_ctrl);
         pin.set_high();
@@ -54,7 +58,7 @@ impl Dhtxx
         wait_for_ms(Millisecond(18), timer);
     }
 
-    fn full_read_sequence(&mut self, pin: &InPin, timer: &mut impl DhtTimer) -> Result<Reading, Error> {
+    fn full_read_sequence(&mut self, pin: &InPin, timer: &mut impl DhtTimer, debug_pin: &mut DebugPin) -> Result<Reading, Error> {
         // Wait for input to go low. 20us timeout
         wait_for_pin_with_timeout(&pin, false, Microsecond(40 + TIMEOUT_PADDING), timer)?;
         // // Wait for high in 80 us
@@ -62,18 +66,20 @@ impl Dhtxx
         // // Wait for low in 80 us
         wait_for_pin_with_timeout(&pin, false, Microsecond(80 + TIMEOUT_PADDING), timer)?;
         // Start of actual data
-        let data = self.read_data(&pin, timer)?;
+        let data = self.read_data(&pin, timer, debug_pin)?;
 
         decode_dht_data(&data)
     }
 
 
-    fn read_data(&mut self, pin: &InPin, timer: &mut impl DhtTimer) -> Result<[u8; 5], Error> 
+    fn read_data(&mut self, pin: &InPin, timer: &mut impl DhtTimer, debug_pin: &mut DebugPin) -> Result<[u8; 5], Error> 
     {
         let mut data = [0;5];
 
+
         for byte in 0..5 {
             for _ in 0..8 {
+                debug_pin.set_low();
                 // Wait for the pin to go high
                 match wait_for_pin_with_timeout(&pin, true, Microsecond(50 + TIMEOUT_PADDING), timer) {
                     Ok(_) => {},
@@ -81,14 +87,17 @@ impl Dhtxx
                         return Err(e);
                     }
                 }
+                debug_pin.set_high();
 
                 // Wait for the pin to go low. If it does in 28 us this bit is a 0
-                if let Ok(_) = wait_for_pin_with_timeout(&pin, false, Microsecond(28), timer) {
+                if let Ok(_) = wait_for_pin_with_timeout(&pin, false, Microsecond(28 + TIMEOUT_PADDING), timer) {
                     // data[byte] &= ~(1 << index);
                     data[byte] = data[byte] << 1;
+                    debug_pin.set_low();
                 }
                 else if let Ok(_) = wait_for_pin_with_timeout(&pin, false, Microsecond(70-28), timer) {
                     data[byte] = (data[byte] << 1) | 1;
+                    debug_pin.set_low();
                 }
                 else {
                     return Err(Error::Timeout);

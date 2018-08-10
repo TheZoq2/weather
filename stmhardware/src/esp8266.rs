@@ -155,6 +155,12 @@ where Tx: hal::serial::Write<u8>,
         self.wait_for_ok()
     }
 
+    /*
+    pub fn enter_sleep_mode(&mut self, time_millis: u32) -> return_type!(()) {
+        
+    }
+    */
+
     fn transmit_data(&mut self, data: &str) -> return_type!(()) {
         self.start_transmission(data.len())?;
         self.wait_for_prompt()?;

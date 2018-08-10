@@ -70,6 +70,12 @@ fn main() -> ! {
     let tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
     let rx = gpioa.pa10.into_floating_input(&mut gpioa.crh);
 
+    // TODO: Move this into the esp struct
+    let mut esp_reset = gpioa.pa8.into_push_pull_output(&mut gpioa.crh);
+    esp_reset.set_high();
+
+    let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
+
 
     let mut timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
 
@@ -98,12 +104,15 @@ fn main() -> ! {
     let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
     let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
 
+    // Some DHT sensors might have a built in pull-up resistor so if it doesn't work
+    // when an external is connected, try removing it
     let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
     let mut dhtxx = dhtxx::Dhtxx::new();
 
     let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
     // esp8266.communicate("+CWJAP?").unwrap();
+    //
 
     loop {
         dhtxx_pin = read_and_send_dht_data(
@@ -111,7 +120,8 @@ fn main() -> ! {
             &mut dhtxx,
             dhtxx_pin,
             &mut gpioa.crl,
-            &mut misc_timer
+            &mut misc_timer,
+            &mut dhtxx_debug_pin
         );
         read_and_send_wind_speed(&mut esp8266, &mut anemometer);
 
@@ -151,10 +161,11 @@ fn read_and_send_dht_data(
     dht: &mut types::DhtType,
     pin: dhtxx::OutPin,
     crl: &mut CRL,
-    timer: &mut Timer<TIM4>
+    timer: &mut Timer<TIM4>,
+    debug_pin: &mut dhtxx::DebugPin
 ) -> dhtxx::OutPin {
     // let (reading, pin) = dht.make_reading(pin, crl, timer).expect("Failed to make dhtxx reading");
-    let (pin, reading) = dht.make_reading(pin, crl, timer);
+    let (pin, reading) = dht.make_reading(pin, crl, timer, debug_pin);
 
     if let Ok(reading) = reading {
         {
@@ -185,7 +196,8 @@ fn read_and_send_dht_data(
         }
     }
     else {
-        asm::bkpt();
+        // asm::bkpt();
+        reading.expect("Failed to read dhtxx data");
     }
     pin
 }
