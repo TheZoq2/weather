@@ -1,3 +1,4 @@
+
 #![feature(proc_macro)]
 #![no_main]
 #![no_std]
@@ -30,6 +31,10 @@ extern crate itoa;
 use cortex_m::asm;
 use rt::ExceptionFrame;
 
+// For stdout
+use cortex_m_semihosting::hio;
+use core::fmt::Write;
+
 use stm32f103xx_hal::prelude::*;
 use stm32f103xx_hal::serial::{Serial};
 //use stm32f103xx_hal::stm32f103xx::{self};
@@ -38,7 +43,7 @@ use stm32f103xx_hal::timer::Timer;
 use stm32f103xx_hal::gpio::gpioa::{CRL};
 use stm32f103xx_hal::gpio::gpiob;
 use stm32f103xx::TIM4;
-use embedded_hal_time::{RealCountDown, Microsecond, Second};
+use embedded_hal_time::{RealCountDown, Microsecond, Second, Millisecond};
 
 mod serial;
 mod esp8266;
@@ -48,7 +53,7 @@ mod api;
 mod dhtxx;
 mod types;
 
-const IP_ADDRESS: &str = "192.168.8.105";
+const IP_ADDRESS: &str = "192.168.8.103";
 const READ_INTERVAL: Second = Second(10);
 
 
@@ -96,7 +101,7 @@ fn main() -> ! {
     let mut led_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
     led_pin.set_high();
 
-    let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, (Hertz(1), 10))
+    let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, Millisecond(10000))
         .expect("Failed to initialise esp8266");
 
     let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
@@ -104,15 +109,12 @@ fn main() -> ! {
     let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
     let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
 
-    // Some DHT sensors might have a built in pull-up resistor so if it doesn't work
-    // when an external is connected, try removing it
     let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
     let mut dhtxx = dhtxx::Dhtxx::new();
 
     let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
     // esp8266.communicate("+CWJAP?").unwrap();
-    //
 
     loop {
         dhtxx_pin = read_and_send_dht_data(
@@ -196,8 +198,9 @@ fn read_and_send_dht_data(
         }
     }
     else {
-        // asm::bkpt();
-        reading.expect("Failed to read dhtxx data");
+        let mut stdout = hio::hstdout().unwrap();
+
+        writeln!(stdout, "Failed to read dhtxx data, ignoring").unwrap();
     }
     pin
 }

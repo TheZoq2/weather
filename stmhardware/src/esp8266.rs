@@ -1,8 +1,10 @@
 extern crate embedded_hal as hal;
 extern crate nb;
+
+use embedded_hal_time::{RealCountDown, Millisecond, Second};
 use core::cmp::min;
 use core::fmt::{self, Write};
-use arrayvec::ArrayString;
+use arrayvec::{CapacityError, ArrayString};
 use itoa;
 
 // use hal::prelude::*;
@@ -10,24 +12,57 @@ use itoa;
 
 use serial;
 
-// Maximum length of an AT response (Length of message + CRLF
+/**
+    Maximum length of an AT response (Length of message + CRLF)
+
+    longest message: `WIFI GOT IP\r\n`
+*/
 const AT_RESPONSE_BUFFER_SIZE: usize = 13;
 
-#[derive(Debug)]
+/**
+  Possible responses from an esp8266 AT command
+*/
+#[derive(Debug, PartialEq)]
 pub enum ATResponse {
     Ok,
     Error,
     Busy,
+    WiFiGotIp
 }
 
+/**
+  Error type for esp communication.
+
+  `R` and `T` are the error types of the serial module
+*/
 #[derive(Debug)]
 pub enum Error<R, T> {
+    /// Serial transmission errors
     TxError(T),
+    /// Serial reception errors
     RxError(R),
+    /// Invalid or unexpected data received from the device
     UnexpectedResponse(ATResponse),
-    Fmt(fmt::Error)
+    /// Errors from the formating of messages
+    Fmt(fmt::Error),
+    /// Error indicating an ArrayString wasn't big enough
+    Capacity(CapacityError)
+}
+impl<R,T> From<fmt::Error> for Error<R,T>{
+    fn from(other: fmt::Error) -> Error<R,T> {
+        Error::Fmt(other)
+    }
+}
+impl<R,T,ErrType> From<CapacityError<ErrType>> for Error<R,T>{
+    fn from(other: CapacityError<ErrType>) -> Error<R,T> {
+        Error::Capacity(other.simplify())
+    }
 }
 
+/**
+    Indicates what step in the data transmission that the sensor is in. Used
+    in `TransmissionError` for reporting information about where things went wrong
+*/
 #[derive(Debug)]
 pub enum TransmissionStep {
     Connect,
@@ -53,11 +88,6 @@ impl<R, T> TransmissionError<R, T> {
     }
 }
 
-impl<R,T> From<fmt::Error> for Error<R,T>{
-    fn from(other: fmt::Error) -> Error<R,T> {
-        Error::Fmt(other)
-    }
-}
 
 pub enum ConnectionType {
     Tcp,
@@ -85,40 +115,46 @@ macro_rules! transmission_return_type {
     }
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+pub type TimeoutUnit = Millisecond;
+
 /**
   Struct for interracting with an esp8266 wifi module over USART
 */
 pub struct Esp8266<Tx, Rx, Timer>
 where Tx: hal::serial::Write<u8>,
       Rx: hal::serial::Read<u8>,
-      Timer: hal::timer::CountDown,
+      Timer: RealCountDown<TimeoutUnit> + hal::timer::CountDown,
       Timer::Time: Copy
 {
     tx: Tx,
     rx: Rx,
     timer: Timer,
-    timeout: (Timer::Time, u8)
+    timeout: Millisecond
 }
 
 impl<Tx, Rx, Timer> Esp8266<Tx, Rx, Timer>
 where Tx: hal::serial::Write<u8>,
       Rx: hal::serial::Read<u8>,
-      Timer: hal::timer::CountDown,
+      Timer: RealCountDown<TimeoutUnit>,
+      Timer: RealCountDown<TimeoutUnit> + hal::timer::CountDown,
       Timer::Time: Copy
 {
 
-    pub fn new(tx: Tx, rx: Rx, timer: Timer, timeout: (Timer::Time, u8)) -> return_type!(Self)
+    pub fn new(tx: Tx, rx: Rx, timer: Timer, timeout: TimeoutUnit) -> return_type!(Self)
     {
         let mut result = Self {tx, rx, timer, timeout};
 
         // Turn off echo on the device and wait for it to process that command
         result.send_at_command("E0")?;
 
-        for _ in 0..timeout.1 {
-            result.timer.start(result.timeout.0);
-            block!(result.timer.wait()).unwrap();
-        }
-        // Read a byte, ignore the result. This is done to clear the buffer
+        result.timer.start_real(result.timeout);
+        block!(result.timer.wait()).unwrap();
+
+        // Make sure we got an OK from the esp
         let _byte = result.wait_for_ok();
 
         Ok(result)
@@ -143,7 +179,7 @@ where Tx: hal::serial::Write<u8>,
     {
         // Send a start connection message
         let tcp_start_result = self.start_tcp_connection(connection_type, address, port);
-        TransmissionError::try( TransmissionStep::Connect, tcp_start_result)?;
+        TransmissionError::try(TransmissionStep::Connect, tcp_start_result)?;
 
         TransmissionError::try(TransmissionStep::Send, self.transmit_data(data))?;
 
@@ -156,8 +192,32 @@ where Tx: hal::serial::Write<u8>,
     }
 
     /*
+    /**
+        Puts the sensor into sleep mode. Due to the way that the esp-01 handles
+        sleep mode, the whole sensor will sleep for `time_millis` milliseconds.
+
+        After that time, some parts of the sensor will wake up and consume more power,
+        however, it will not be operational until its reset pin is pulled low for a short
+        while. This can be done using the `wake_up` method
+
+        For more information, see https://tzapu.com/minimalist-battery-powered-esp8266-wifi-temperature-logger/
+    */
     pub fn enter_sleep_mode(&mut self, time_millis: u32) -> return_type!(()) {
-        
+        // Maximum length of the `time_millis` value
+        const MILLIS_LENGTH: usize = 10;
+
+        const MSG_LENGTH: usize = 8 + MILLIS_LENGTH;
+        let mut msg_str = ArrayString::<[_;MSG_LENGTH]>::from("AT+GSLP=")?;
+
+        let mut millis_str = ArrayString::<[_; MILLIS_LENGTH]>::new();
+        itoa::fmt(&mut millis_str, time_millis)?;
+
+        msg_str.try_push_str(&millis_str)?;
+        self.send_at_command(&msg_str)
+    }
+
+    pub fn exit_deep_sleep(&mut self) -> return_type!(()) {
+        self.reset_pin.set_low()
     }
     */
 
@@ -214,7 +274,7 @@ where Tx: hal::serial::Write<u8>,
         Ok(())
     }
 
-    fn wait_for_ok(&mut self) -> return_type!(()) {
+    fn wait_for_at_response(&mut self, expected_response: &ATResponse) -> return_type!(()) {
         let mut buffer = [0; AT_RESPONSE_BUFFER_SIZE];
         let response = serial::read_until_message(
             &mut self.rx,
@@ -225,7 +285,7 @@ where Tx: hal::serial::Write<u8>,
         );
 
         match response {
-            Ok(ATResponse::Ok) => {
+            Ok(ref resp) if resp == expected_response => {
                 Ok(())
             },
             Ok(other) => {
@@ -235,6 +295,13 @@ where Tx: hal::serial::Write<u8>,
                 Err(Error::RxError(e))
             }
         }
+    }
+
+    fn wait_for_ok(&mut self) -> return_type!(()) {
+        self.wait_for_at_response(&ATResponse::Ok)
+    }
+    fn wait_for_got_ip(&mut self) -> return_type!(()) {
+        self.wait_for_at_response(&ATResponse::WiFiGotIp)
     }
 
     fn wait_for_prompt(&mut self) -> return_type!(()) {
@@ -280,6 +347,9 @@ pub fn parse_at_response(buffer: &[u8], offset: usize) -> Option<ATResponse> {
     }
     else if compare_circular_buffer(buffer, offset, "BUSY\r\n".as_bytes()) {
         Some(ATResponse::Busy)
+    }
+    else if compare_circular_buffer(buffer, offset, "WIFI GOT IP\r\n".as_bytes()) {
+        Some(ATResponse::WiFiGotIp)
     }
     else {
         None
