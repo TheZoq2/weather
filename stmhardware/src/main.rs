@@ -74,19 +74,11 @@ fn main() -> ! {
 
     let tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
     let rx = gpioa.pa10.into_floating_input(&mut gpioa.crh);
-
-    // TODO: Move this into the esp struct
-    let mut esp_reset = gpioa.pa8.into_push_pull_output(&mut gpioa.crh);
-    esp_reset.set_high();
+    let esp_reset = gpioa.pa8.into_push_pull_output(&mut gpioa.crh);
+    let esp_timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
 
     let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
 
-
-    let mut timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
-
-    // Allow the esp8266 to initialise
-    timer.start_real(Second(10));
-    block!(timer.wait()).unwrap();
 
     let serial = Serial::usart1(
         p.USART1,
@@ -101,7 +93,7 @@ fn main() -> ! {
     let mut led_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
     led_pin.set_high();
 
-    let mut esp8266 = esp8266::Esp8266::new(tx, rx, timer, Millisecond(10000))
+    let mut esp8266 = esp8266::Esp8266::new(tx, rx, esp_timer, esp_reset)
         .expect("Failed to initialise esp8266");
 
     let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
@@ -173,7 +165,7 @@ fn read_and_send_dht_data(
         {
             let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
             communication::encode_f32("humidity", reading.humidity, &mut encoding_buffer)
-                .expect("Failed to send humidity");
+                .expect("Failed to encode humidity");
 
             // let a = 0;
             esp8266.send_data(
@@ -181,7 +173,7 @@ fn read_and_send_dht_data(
                 IP_ADDRESS,
                 2000,
                 &encoding_buffer
-            );
+            ).expect("Failed to send humidity data");
         }
         {
             let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
@@ -194,7 +186,7 @@ fn read_and_send_dht_data(
                 IP_ADDRESS,
                 2000,
                 &encoding_buffer
-            );
+            ).expect("Failed to send temperature");
         }
     }
     else {

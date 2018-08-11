@@ -1,7 +1,9 @@
 extern crate embedded_hal as hal;
 extern crate nb;
 
-use embedded_hal_time::{RealCountDown, Millisecond, Second};
+use cortex_m::asm;
+
+use embedded_hal_time::{RealCountDown, Millisecond, Second, Microsecond};
 use core::cmp::min;
 use core::fmt::{self, Write};
 use arrayvec::{CapacityError, ArrayString};
@@ -27,7 +29,7 @@ pub enum ATResponse {
     Ok,
     Error,
     Busy,
-    WiFiGotIp
+    WiFiGotIp,
 }
 
 /**
@@ -119,43 +121,57 @@ macro_rules! transmission_return_type {
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-pub type TimeoutUnit = Millisecond;
 
 /**
   Struct for interracting with an esp8266 wifi module over USART
 */
-pub struct Esp8266<Tx, Rx, Timer>
+pub struct Esp8266<Tx, Rx, Timer, Rst>
 where Tx: hal::serial::Write<u8>,
       Rx: hal::serial::Read<u8>,
-      Timer: RealCountDown<TimeoutUnit> + hal::timer::CountDown,
-      Timer::Time: Copy
+      Timer: RealCountDown<Millisecond>,
+      Timer: RealCountDown<Microsecond>,
+      Timer: hal::timer::CountDown,
+      Timer::Time: Copy,
+      Rst: hal::digital::OutputPin
 {
     tx: Tx,
     rx: Rx,
     timer: Timer,
-    timeout: Millisecond
+    timeout: Millisecond,
+    reset_pin: Rst
 }
 
-impl<Tx, Rx, Timer> Esp8266<Tx, Rx, Timer>
+impl<Tx, Rx, Timer, Rst> Esp8266<Tx, Rx, Timer, Rst>
 where Tx: hal::serial::Write<u8>,
       Rx: hal::serial::Read<u8>,
-      Timer: RealCountDown<TimeoutUnit>,
-      Timer: RealCountDown<TimeoutUnit> + hal::timer::CountDown,
-      Timer::Time: Copy
+      Timer: RealCountDown<Millisecond>,
+      Timer: RealCountDown<Microsecond>,
+      Timer: hal::timer::CountDown,
+      Timer::Time: Copy,
+      Rst: hal::digital::OutputPin
 {
 
-    pub fn new(tx: Tx, rx: Rx, timer: Timer, timeout: TimeoutUnit) -> return_type!(Self)
+    /**
+      Sets up the esp8266 struct and configures the device for future use
+
+      `tx` and `rx` are the pins used for serial communication, `timer` is
+      a hardware timer for dealing with things like serial timeout and
+      `reset_pin` is a pin which must be connected to the reset pin
+      of the device
+    */
+    pub fn new(tx: Tx, rx: Rx, timer: Timer, reset_pin: Rst)
+        -> return_type!(Self)
     {
-        let mut result = Self {tx, rx, timer, timeout};
+        let timeout = Millisecond(5000);
+        let mut result = Self {tx, rx, timer, timeout, reset_pin};
+
+        result.reset()?;
 
         // Turn off echo on the device and wait for it to process that command
         result.send_at_command("E0")?;
 
-        result.timer.start_real(result.timeout);
-        block!(result.timer.wait()).unwrap();
-
         // Make sure we got an OK from the esp
-        let _byte = result.wait_for_ok();
+        result.wait_for_ok()?;
 
         Ok(result)
     }
@@ -215,11 +231,34 @@ where Tx: hal::serial::Write<u8>,
         msg_str.try_push_str(&millis_str)?;
         self.send_at_command(&msg_str)
     }
-
-    pub fn exit_deep_sleep(&mut self) -> return_type!(()) {
-        self.reset_pin.set_low()
-    }
     */
+
+    pub fn reset(&mut self) -> return_type!(()) {
+        self.reset_pin.set_low();
+
+        // Give the esp some time to react
+        self.timer.start_real(Millisecond(10));
+        // This unwrap is safe because wait() returns `Result<(), Void>`
+        block!(self.timer.wait()).unwrap();
+
+        self.reset_pin.set_high();
+
+        // Because the device sends some random incorrect data after/while being reset
+        // we need to read some data until we get valid data again
+        loop {
+            let result = serial::read_with_timeout(
+                &mut self.rx,
+                &mut self.timer,
+                Millisecond(1000)
+            );
+
+            if let Ok(byte) = result {
+                break;
+            }
+        }
+
+        self.wait_for_got_ip()
+    }
 
     fn transmit_data(&mut self, data: &str) -> return_type!(()) {
         self.start_transmission(data.len())?;
@@ -311,7 +350,7 @@ where Tx: hal::serial::Write<u8>,
             &mut self.timer,
             self.timeout,
             &mut buffer,
-            &|buf, _| {
+            &|buf, ptr| {
                 if buf[0] == '>' as u8 {
                     Some(())
                 }
@@ -345,7 +384,7 @@ pub fn parse_at_response(buffer: &[u8], offset: usize) -> Option<ATResponse> {
     else if compare_circular_buffer(buffer, offset, "ERROR\r\n".as_bytes()) {
         Some(ATResponse::Error)
     }
-    else if compare_circular_buffer(buffer, offset, "BUSY\r\n".as_bytes()) {
+    else if compare_circular_buffer(buffer, offset, "busy p...\r\n".as_bytes()) {
         Some(ATResponse::Busy)
     }
     else if compare_circular_buffer(buffer, offset, "WIFI GOT IP\r\n".as_bytes()) {

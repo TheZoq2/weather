@@ -21,6 +21,7 @@ where
     T: RealCountDown<Time>,
     S: hal::serial::Read<u8>,
 {
+    timer.start_real(timeout);
     loop {
         match serial.read() {
             // raise error
