@@ -1,6 +1,8 @@
 extern crate embedded_hal as hal;
 extern crate nb;
 
+use embedded_hal_time::RealCountDown;
+
 // use hal::prelude::*;
 
 #[derive(Debug)]
@@ -10,20 +12,15 @@ pub enum Error<E> {
     TimedOut,
 }
 
-pub fn read_with_timeout<S, T>(
+pub fn read_with_timeout<S, T, Time>(
     serial: &mut S,
     timer: &mut T,
-    timeout: T::Time,
-    timeout_multiplyer: u8
+    timeout: Time,
 ) -> Result<u8, Error<S::Error>>
 where
-    T: hal::timer::CountDown,
+    T: RealCountDown<Time>,
     S: hal::serial::Read<u8>,
-    T::Time: Copy
 {
-    let mut timeout_remaining = timeout_multiplyer;
-    timer.start(timeout);
-
     loop {
         match serial.read() {
             // raise error
@@ -39,15 +36,12 @@ where
                 // The error type specified by `timer.wait()` is `!`, which
                 // means no error can actually occur. The Rust compiler
                 // still forces us to provide this match arm, though.
-                unreachable!()
+                unreachable!("Error was !, something has gone horribly wrong")
             },
             // no timeout yet, try again
             Err(nb::Error::WouldBlock) => continue,
             Ok(()) => {
-                if timeout_remaining == 1 {
-                    return Err(Error::TimedOut);
-                }
-                timeout_remaining -= 1;
+                return Err(Error::TimedOut);
             }
         }
     }
@@ -55,24 +49,23 @@ where
 
 /**
 */
-pub fn read_until_message<S, T, C, R>(
+pub fn read_until_message<S, T, C, R, Time>(
     rx: &mut S,
     timer: &mut T,
-    timeout: (T::Time, u8),
+    timeout: Time,
     buffer: &mut [u8],
     parser: &C
 ) -> Result<R, Error<S::Error>>
 where
-    T: hal::timer::CountDown,
+    T: RealCountDown<Time>,
     S: hal::serial::Read<u8>,
     C: Fn(&[u8], usize) -> Option<R>,
-    T::Time: Copy
+    Time: Copy
 {
     let mut ptr = 0;
     let mut byte_amount = 0;
     loop {
-        let (timeout, multiplyer) = timeout;
-        match read_with_timeout(rx, timer, timeout, multiplyer) {
+        match read_with_timeout(rx, timer, timeout) {
             Ok(byte) => {
                 buffer[ptr] = byte;
                 ptr = (ptr+1) % buffer.len();

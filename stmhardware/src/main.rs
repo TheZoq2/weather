@@ -53,7 +53,7 @@ mod api;
 mod dhtxx;
 mod types;
 
-const IP_ADDRESS: &str = "192.168.8.103";
+const IP_ADDRESS: &str = "192.168.8.105";
 const READ_INTERVAL: Second = Second(10);
 
 
