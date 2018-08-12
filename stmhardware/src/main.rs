@@ -119,8 +119,13 @@ fn main() -> ! {
         );
         read_and_send_wind_speed(&mut esp8266, &mut anemometer);
 
+        esp8266.power_down();
         misc_timer.start_real(READ_INTERVAL);
+        misc_timer.listen(stm32f103xx_hal::timer::Event::Update);
+        loop {}
+        // asm::wfi();
         block!(misc_timer.wait()).unwrap();
+        esp8266.power_up();
     }
 }
 

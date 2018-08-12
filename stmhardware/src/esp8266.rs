@@ -138,7 +138,7 @@ where Tx: hal::serial::Write<u8>,
     rx: Rx,
     timer: Timer,
     timeout: Millisecond,
-    reset_pin: Rst
+    chip_enable_pin: Rst
 }
 
 impl<Tx, Rx, Timer, Rst> Esp8266<Tx, Rx, Timer, Rst>
@@ -156,14 +156,14 @@ where Tx: hal::serial::Write<u8>,
 
       `tx` and `rx` are the pins used for serial communication, `timer` is
       a hardware timer for dealing with things like serial timeout and
-      `reset_pin` is a pin which must be connected to the reset pin
+      `chip_enable_pin` is a pin which must be connected to the CHIP_EN pin
       of the device
     */
-    pub fn new(tx: Tx, rx: Rx, timer: Timer, reset_pin: Rst)
+    pub fn new(tx: Tx, rx: Rx, timer: Timer, chip_enable_pin: Rst)
         -> return_type!(Self)
     {
         let timeout = Millisecond(5000);
-        let mut result = Self {tx, rx, timer, timeout, reset_pin};
+        let mut result = Self {tx, rx, timer, timeout, chip_enable_pin};
 
         result.reset()?;
 
@@ -207,41 +207,28 @@ where Tx: hal::serial::Write<u8>,
         self.wait_for_ok()
     }
 
-    /*
     /**
-        Puts the sensor into sleep mode. Due to the way that the esp-01 handles
-        sleep mode, the whole sensor will sleep for `time_millis` milliseconds.
-
-        After that time, some parts of the sensor will wake up and consume more power,
-        however, it will not be operational until its reset pin is pulled low for a short
-        while. This can be done using the `wake_up` method
-
-        For more information, see https://tzapu.com/minimalist-battery-powered-esp8266-wifi-temperature-logger/
+      Turns off the device by setting chip_enable to 0
     */
-    pub fn enter_sleep_mode(&mut self, time_millis: u32) -> return_type!(()) {
-        // Maximum length of the `time_millis` value
-        const MILLIS_LENGTH: usize = 10;
-
-        const MSG_LENGTH: usize = 8 + MILLIS_LENGTH;
-        let mut msg_str = ArrayString::<[_;MSG_LENGTH]>::from("AT+GSLP=")?;
-
-        let mut millis_str = ArrayString::<[_; MILLIS_LENGTH]>::new();
-        itoa::fmt(&mut millis_str, time_millis)?;
-
-        msg_str.try_push_str(&millis_str)?;
-        self.send_at_command(&msg_str)
+    pub fn power_down(&mut self) {
+        self.chip_enable_pin.set_low();
     }
+
+    /**
+      Resets the device by setting chip_enable to 0 and then back to 1
     */
-
     pub fn reset(&mut self) -> return_type!(()) {
-        self.reset_pin.set_low();
-
-        // Give the esp some time to react
+        self.power_down();
         self.timer.start_real(Millisecond(10));
-        // This unwrap is safe because wait() returns `Result<(), Void>`
         block!(self.timer.wait()).unwrap();
+        self.power_up()
+    }
 
-        self.reset_pin.set_high();
+    /**
+      Turns the device back on by setting chip_enable to high
+    */
+    pub fn power_up(&mut self) -> return_type!(()) {
+        self.chip_enable_pin.set_high();
 
         // Because the device sends some random incorrect data after/while being reset
         // we need to read some data until we get valid data again
