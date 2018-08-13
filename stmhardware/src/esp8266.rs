@@ -230,21 +230,15 @@ where Tx: hal::serial::Write<u8>,
     pub fn power_up(&mut self) -> return_type!(()) {
         self.chip_enable_pin.set_high();
 
-        // Because the device sends some random incorrect data after/while being reset
-        // we need to read some data until we get valid data again
+        // The esp01 sends a bunch of garbage over the serial port before starting properly,
+        // therefore we need to retry this until we get valid data or time out
         loop {
-            let result = serial::read_with_timeout(
-                &mut self.rx,
-                &mut self.timer,
-                Millisecond(1000)
-            );
-
-            if let Ok(byte) = result {
-                break;
+            match self.wait_for_got_ip() {
+                Ok(()) => return Ok(()),
+                e @ Err(Error::RxError(serial::Error::TimedOut)) => return e,
+                _ => continue
             }
         }
-
-        self.wait_for_got_ip()
     }
 
     fn transmit_data(&mut self, data: &str) -> return_type!(()) {

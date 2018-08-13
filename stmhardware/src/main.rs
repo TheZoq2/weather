@@ -54,6 +54,7 @@ mod dhtxx;
 mod types;
 
 const IP_ADDRESS: &str = "192.168.8.105";
+// const READ_INTERVAL: Second = Second(60*5);
 const READ_INTERVAL: Second = Second(10);
 
 
@@ -121,11 +122,10 @@ fn main() -> ! {
 
         esp8266.power_down();
         misc_timer.start_real(READ_INTERVAL);
-        misc_timer.listen(stm32f103xx_hal::timer::Event::Update);
-        loop {}
+        // misc_timer.listen(stm32f103xx_hal::timer::Event::Update);
         // asm::wfi();
         block!(misc_timer.wait()).unwrap();
-        esp8266.power_up();
+        esp8266.power_up().expect("Failed to power up esp8266");
     }
 }
 
@@ -195,9 +195,9 @@ fn read_and_send_dht_data(
         }
     }
     else {
-        let mut stdout = hio::hstdout().unwrap();
+        // let mut stdout = hio::hstdout().unwrap();
 
-        writeln!(stdout, "Failed to read dhtxx data, ignoring").unwrap();
+        // writeln!(stdout, "Failed to read dhtxx data, ignoring").unwrap();
     }
     pin
 }
