@@ -27,5 +27,10 @@ gdb:
 gdb_release:
 	arm-none-eabi-gdb target/${TARGET_NAME}/release/${PROJECT_NAME}
 
+esp_monitor:
+	stty -F ${DEV} inlcr
+	stty -F ${DEV} onlcr
+	screen ${DEV} 960096009600960096009600960096009600
+
 doc:
 	cargo doc
