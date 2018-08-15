@@ -16,5 +16,8 @@ toml = "0.4"
 
 error-chain = "0.11"
 
+log = "0.4"
+fern = {version = "0.5", features = ["colored"]}
+
 
 # clippy = "*"

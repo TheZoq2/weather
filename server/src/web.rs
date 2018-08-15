@@ -53,7 +53,7 @@ pub fn run_server(listen_address: String, port: u16, readings: ReadingCollection
     });
 
     thread::spawn(move || {
-        println!("Starting http server: http://localhost:{}", port);
+        info!("Starting http server: http://localhost:{}", port);
         server.listen(&listen_address, &format!("{}", port));
     });
 }

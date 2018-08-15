@@ -16,14 +16,14 @@ pub fn run_logger(interval: Duration, file: PathBuf, readings: ReadingCollection
         loop {
             thread::sleep(interval);
             {
-                println!("Saving data");
+                info!("Saving data");
                 let readings = readings.lock().unwrap();
 
                 if let Err(e) = save_data(&file, &*readings) {
-                    println!("Failed to log data {:?}", e);
+                    error!("Failed to log data {:?}", e);
                 };
 
-                println!("Data saved");
+                info!("Data saved");
             }
         }
     });
