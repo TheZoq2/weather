@@ -12,8 +12,8 @@ use serial;
 
 pub type AnemometerType = anemometer::Anemometer<PA1<Input<Floating>>, Timer<TIM3>>;
 
-pub type SerialReadError = ::stm32f103xx_hal::serial::Error;
-pub type SerialWriteError = ::stm32f103xx_hal::serial::Error;
+pub type SerialReadError = serial::Error<::stm32f103xx_hal::serial::Error>;
+pub type SerialWriteError = !;
 
 pub type EspRxType = Rx<USART1>;
 pub type EspTxType = Tx<USART1>;
