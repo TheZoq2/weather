@@ -331,7 +331,7 @@ where Tx: hal::serial::Write<u8>,
             &mut self.timer,
             self.timeout,
             &mut buffer,
-            &|buf, ptr| {
+            &|buf, _ptr| {
                 if buf[0] == '>' as u8 {
                     Some(())
                 }

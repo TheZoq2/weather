@@ -76,12 +76,10 @@ fn main() -> ! {
 
     // These errors are unrecoverable so we do not save any errors here
     let p = stm32f103xx::Peripherals::take().unwrap();
-    let cp = stm32f103xx::CorePeripherals::take().unwrap();
 
     let mut flash = p.FLASH.constrain();
     let mut rcc = p.RCC.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
-    let mut gpiob = p.GPIOB.split(&mut rcc.apb2);
     let mut gpioc = p.GPIOC.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
 
@@ -155,7 +153,8 @@ fn read_and_send_wind_speed(
     let result = anemometer.measure();
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-    communication::encode_f32("wind_raw", result, &mut encoding_buffer);
+    communication::encode_f32("wind_raw", result, &mut encoding_buffer)
+        .expect("Failed to encode raw wind data");
 
     // let a = 0;
     let send_result = esp8266.send_data(
