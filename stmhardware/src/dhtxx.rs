@@ -15,13 +15,10 @@ type InPin = PA0<Input<Floating>>;
 
 pub type DebugPin = PA2<Output<PushPull>>;
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum Error {
-    #[fail(display = "Timeout")]
     Timeout,
-    #[fail(display = "Unexpected duration in one of the received bits")]
     UnexpectedBitDuration,
-    #[fail(display = "incorrect parity")]
     IncorrectParity
 }
 

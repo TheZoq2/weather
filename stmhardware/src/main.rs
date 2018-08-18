@@ -28,10 +28,6 @@ extern crate stm32f103xx;
 extern crate arrayvec;
 extern crate panic_semihosting;
 extern crate itoa;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate failure_derive;
 
 use cortex_m::asm;
 use rt::ExceptionFrame;
@@ -59,10 +55,6 @@ mod dhtxx;
 mod types;
 mod error;
 
-use failure::{ResultExt, Fail};
-type Context = ::failure::Context<&'static str>;
-type Result<T> = ::core::result::Result<T, Context>;
-
 type ErrorString = arrayvec::ArrayString<[u8; 128]>;
 
 const IP_ADDRESS: &str = "46.59.41.53";
@@ -77,21 +69,14 @@ const SLEEP_ITERATIONS: u8 = 6;
 macro_rules! handle_result {
     ($result:expr, $storage:ident) => {
         if let Err(e) = $result {
+            let wrapped = error::ReadLoopError::from(e);
             // Write the error to hio
             let mut stdout = hio::hstdout().unwrap();
-            writeln!(stdout, "Error: {:?}", e).unwrap();
-
-            {
-                let mut cause = e.cause();
-                while let Some(inner_cause) = cause {
-                    writeln!(stdout, " - caused by: {:?}", inner_cause).unwrap();
-                    cause = inner_cause.cause();
-                }
-            }
-
+            writeln!(stdout, "Error: {:#?}", wrapped).unwrap();
+            //
             // Store the error if it is the first one that occured
             if $storage.is_none() {
-                $storage = Some(e);
+                $storage = Some(wrapped);
             }
         }
     }
@@ -100,7 +85,7 @@ macro_rules! handle_result {
 entry!(main);
 
 fn main() -> ! {
-    let mut last_error = None;
+    let mut last_error: Option<error::ReadLoopError> = None;
 
     // These errors are unrecoverable so we do not save any errors here
     let p = stm32f103xx::Peripherals::take().unwrap();
@@ -171,29 +156,21 @@ fn main() -> ! {
     }
 }
 
-fn esp_send_data(esp8266: &mut types::EspType, ip: &str, port: u16, data: &str) -> Result<()> {
-    match esp8266.send_data(esp8266::ConnectionType::Tcp, ip, port, data) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(error::Error::Esp8266TransmissionError(e.into()).context(""))
-    }
-}
-
 fn read_and_send_wind_speed(
     esp8266: &mut types::EspType,
     anemometer: &mut types::AnemometerType
-) -> ::core::result::Result<(), failure::Context<&'static str>>{
+) -> Result<(), error::AnemometerError>{
     let result = anemometer.measure();
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-    communication::encode_f32("wind_raw", result, &mut encoding_buffer)
-        .context("Failed to encode raw wind data")?;
+    communication::encode_f32("wind_raw", result, &mut encoding_buffer)?;
 
-    Ok(esp_send_data(
-        esp8266,
+    Ok(esp8266.send_data(
+        esp8266::ConnectionType::Tcp,
         IP_ADDRESS,
         2000,
         &encoding_buffer
-    ).context("Failed to send wind data")?)
+    )?)
 }
 
 fn read_and_send_dht_data(
@@ -203,42 +180,39 @@ fn read_and_send_dht_data(
     crl: &mut CRL,
     timer: &mut Timer<TIM4>,
     debug_pin: &mut dhtxx::DebugPin
-) -> (dhtxx::OutPin, Result<()>) {
-    // let (reading, pin) = dht.make_reading(pin, crl, timer).expect("Failed to make dhtxx reading");
+) -> (dhtxx::OutPin, Result<(), error::DhtError>) {
     let (pin, reading) = dht.make_reading(pin, crl, timer, debug_pin);
 
     match reading {
         Ok(reading) => (pin, send_dht_data(esp8266, reading)),
-        Err(e) => (pin, Err(e.context("Failed to read dht data")))
+        Err(e) => (pin, Err(error::DhtError::Dht(e)))
     }
 }
 
-fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Result<()> {
+fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Result<(), error::DhtError> {
     {
         let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-        communication::encode_f32("humidity", reading.humidity, &mut encoding_buffer)
-            .context("Failed to encode humidity")?;
+        communication::encode_f32("humidity", reading.humidity, &mut encoding_buffer)?;
 
         // let a = 0;
-        esp_send_data(
-            esp8266,
+        esp8266.send_data(
+            esp8266::ConnectionType::Tcp,
             IP_ADDRESS,
             2000,
             &encoding_buffer
-        ).context("Failed to send humidity data")?;
+        )?;
     }
     {
         let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
-        communication::encode_f32("temperature", reading.temperature, &mut encoding_buffer)
-            .context("Failed to encode temperature")?;
+        communication::encode_f32("temperature", reading.temperature, &mut encoding_buffer)?;
 
         // let a = 0;
-        esp_send_data(
-            esp8266,
+        esp8266.send_data(
+            esp8266::ConnectionType::Tcp,
             IP_ADDRESS,
             2000,
             &encoding_buffer
-        ).context("Failed to send temperature")?;
+        )?;
     }
 
     Ok(())
