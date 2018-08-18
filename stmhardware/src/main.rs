@@ -27,6 +27,10 @@ extern crate stm32f103xx;
 extern crate arrayvec;
 extern crate panic_semihosting;
 extern crate itoa;
+#[macro_use]
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 
 use cortex_m::asm;
 use rt::ExceptionFrame;
@@ -52,15 +56,25 @@ mod communication;
 mod api;
 mod dhtxx;
 mod types;
+mod error;
 
-const IP_ADDRESS: &str = "192.168.8.105";
+type ErrorString = arrayvec::ArrayString<[u8; 128]>;
+
+const IP_ADDRESS: &str = "46.59.41.53";
+// const IP_ADDRESS: &str = "192.168.8.103";
 // const READ_INTERVAL: Second = Second(60*5);
-const READ_INTERVAL: Second = Second(10);
-
+// const READ_INTERVAL: Second = Second(30);
+// Sleep for 5 minutes between reads, but wake up once every 10 seconds seconds
+// to keep power banks from shutting down the psu
+const WAKEUP_INTERVAL: Second = Second(10);
+const SLEEP_ITERATIONS: u8 = 6;
 
 entry!(main);
 
 fn main() -> ! {
+    let mut last_error = None;
+
+    // These errors are unrecoverable so we do not save any errors here
     let p = stm32f103xx::Peripherals::take().unwrap();
     let cp = stm32f103xx::CorePeripherals::take().unwrap();
 
@@ -73,13 +87,11 @@ fn main() -> ! {
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
+    // set up esp8266
     let tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
     let rx = gpioa.pa10.into_floating_input(&mut gpioa.crh);
     let esp_reset = gpioa.pa8.into_push_pull_output(&mut gpioa.crh);
     let esp_timer = Timer::tim2(p.TIM2, Hertz(1), clocks, &mut rcc.apb1);
-
-    let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
-
 
     let serial = Serial::usart1(
         p.USART1,
@@ -90,12 +102,12 @@ fn main() -> ! {
         &mut rcc.apb2,
     );
     let (tx, rx) = serial.split();
-
-    let mut led_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-    led_pin.set_high();
-
     let mut esp8266 = esp8266::Esp8266::new(tx, rx, esp_timer, esp_reset)
         .expect("Failed to initialise esp8266");
+
+
+    let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
+
 
     let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
     // TODO: Use internal pull up instead
@@ -118,21 +130,28 @@ fn main() -> ! {
             &mut misc_timer,
             &mut dhtxx_debug_pin
         );
-        read_and_send_wind_speed(&mut esp8266, &mut anemometer);
 
-        esp8266.power_down();
-        misc_timer.start_real(READ_INTERVAL);
-        // misc_timer.listen(stm32f103xx_hal::timer::Event::Update);
-        // asm::wfi();
-        block!(misc_timer.wait()).unwrap();
-        esp8266.power_up().expect("Failed to power up esp8266");
+        if let Err(e) = read_and_send_wind_speed(&mut esp8266, &mut anemometer) {
+            if last_error != None {
+                last_error = Some(e);
+            }
+        }
+
+        for _i in 0..SLEEP_ITERATIONS {
+            esp8266.power_down();
+            misc_timer.start_real(WAKEUP_INTERVAL);
+            // misc_timer.listen(stm32f103xx_hal::timer::Event::Update);
+            // asm::wfi();
+            block!(misc_timer.wait()).unwrap();
+            esp8266.power_up().expect("Failed to power up esp8266");
+        }
     }
 }
 
 fn read_and_send_wind_speed(
     esp8266: &mut types::EspType,
     anemometer: &mut types::AnemometerType
-) {
+) -> Result<(), ErrorString>{
     let result = anemometer.measure();
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
@@ -147,10 +166,16 @@ fn read_and_send_wind_speed(
     );
 
     match send_result {
-        Ok(_) => {},
-        Err(_e) => {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            let mut output = ErrorString::new();
+            write!(output, "{:?}", e)
+                .expect("Failed to encode error in read_and_send_wind_speed");
+
             //Something went wrong. Trying to close connection as cleanup
             esp8266.close_connection().ok();
+
+            Err(output)
         }
     }
 }

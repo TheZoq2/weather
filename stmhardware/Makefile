@@ -4,8 +4,12 @@ TARGET_NAME=thumbv7m-none-eabi
 PROJECT_NAME=weather
 
 release:
-	cargo build --release
+	make rb
 	make gdb_release
+
+rb:
+	cargo build --release
+
 
 all:
 	make build
