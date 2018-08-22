@@ -23,6 +23,7 @@ pub fn tcp_handler(listener: TcpListener, tx_arc_mutex: Arc<Mutex<Sender<Command
             let message = String::from_utf8(buffer).unwrap();
             info!("Got message: {}", message);
 
+
             let command = if message.chars().peekable().peek() == Some(&OPERATION_PREFIX) {
                 // Handle operation
                 parse_operation(&message)

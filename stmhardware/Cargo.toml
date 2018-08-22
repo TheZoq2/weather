@@ -10,6 +10,8 @@
 # editing this file be aware that the upstream Cargo.toml
 # will likely look very different (and much more reasonable)
 
+cargo-features = ["profile-overrides"]
+
 [package]
 name = "weather"
 version = "0.2.4"
@@ -22,6 +24,10 @@ codegen-units = 1
 opt-level = 1
 lto = false
 
+[profile.dev.overrides."*"]
+opt-level = 3
+debug = true
+
 [profile.release]
 lto = true
 debug = true
@@ -33,6 +39,7 @@ cortex-m = "0.5.0"
 cortex-m-semihosting = "0.3.0"
 nb = "0.1.1"
 panic-semihosting = "0.2.0"
+dhtxx = {path = "dhtxx"}
 
 [dependencies.embedded-hal]
 version = "0.2.1"

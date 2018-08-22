@@ -28,6 +28,7 @@ extern crate stm32f103xx;
 extern crate arrayvec;
 extern crate panic_semihosting;
 extern crate itoa;
+extern crate dhtxx;
 
 use cortex_m::asm;
 use rt::ExceptionFrame;
@@ -51,14 +52,13 @@ mod esp8266;
 mod anemometer;
 mod communication;
 mod api;
-mod dhtxx;
 mod types;
 mod error;
 
 type ErrorString = arrayvec::ArrayString<[u8; 128]>;
 
-const IP_ADDRESS: &str = "46.59.41.53";
-// const IP_ADDRESS: &str = "192.168.8.103";
+// const IP_ADDRESS: &str = "46.59.41.53";
+const IP_ADDRESS: &str = "192.168.0.11";
 // const READ_INTERVAL: Second = Second(60*5);
 // const READ_INTERVAL: Second = Second(30);
 // Sleep for 5 minutes between reads, but wake up once every 10 seconds seconds
@@ -132,6 +132,32 @@ fn main() -> ! {
     // esp8266.communicate("+CWJAP?").unwrap();
 
     loop {
+        // Try to send an error message if an error occured
+        let should_clear_error = if let Some(ref err) = last_error {
+            let mut buff = arrayvec::ArrayString::<[u8; 256]>::new();
+            writeln!(buff, ";Fatal: {:?}", err)
+                .expect("Fatal: Failed to send previous error to server");
+
+            let send_result = esp8266.send_data(
+                esp8266::ConnectionType::Tcp,
+                IP_ADDRESS,
+                2000,
+                &buff
+            );
+
+            match send_result {
+                Ok(()) => true,
+                Err(_) => false
+            }
+        }
+        else {
+            false
+        };
+
+        if should_clear_error {
+            last_error = None;
+        }
+
         let (returned_pin, result) = read_and_send_dht_data(
             &mut esp8266,
             &mut dhtxx,
@@ -142,7 +168,6 @@ fn main() -> ! {
         );
         dhtxx_pin = returned_pin;
         handle_result!(result, last_error);
-
         handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error);
 
         for _i in 0..SLEEP_ITERATIONS {
