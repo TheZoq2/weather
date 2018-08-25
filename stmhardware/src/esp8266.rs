@@ -245,7 +245,7 @@ where Tx: hal::serial::Write<u8>,
     pub fn pull_some_current(&mut self) {
         self.chip_enable_pin.set_high();
 
-        self.timer.start_real(Microsecond(500));
+        self.timer.start_real(Millisecond(500));
         block!(self.timer.wait()).unwrap();
         self.chip_enable_pin.set_low();
     }
