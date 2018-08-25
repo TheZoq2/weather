@@ -3,9 +3,6 @@ unexport CARGO_INCREMENTAL
 TARGET_NAME=thumbv7m-none-eabi
 PROJECT_NAME=weather
 
-all:
-	make build
-	make gdb
 
 release:
 	make rb
@@ -13,6 +10,10 @@ release:
 
 rb:
 	cargo build --release
+
+all:
+	make build
+	make gdb
 
 build:
 	cargo build

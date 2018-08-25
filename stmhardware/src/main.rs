@@ -59,25 +59,45 @@ type ErrorString = arrayvec::ArrayString<[u8; 128]>;
 
 // const IP_ADDRESS: &str = "46.59.41.53";
 const IP_ADDRESS: &str = "192.168.0.11";
+const PORT: u16 = 2000;
 // const READ_INTERVAL: Second = Second(60*5);
 // const READ_INTERVAL: Second = Second(30);
 // Sleep for 5 minutes between reads, but wake up once every 10 seconds seconds
 // to keep power banks from shutting down the psu
 const WAKEUP_INTERVAL: Second = Second(10);
-const SLEEP_ITERATIONS: u8 = 6;
+const SLEEP_ITERATIONS: u8 = 6 * 5;
 
 macro_rules! handle_result {
-    ($result:expr, $storage:ident) => {
+    ($result:expr, $storage:ident, $esp:ident) => {
         if let Err(e) = $result {
-            let wrapped = error::ReadLoopError::from(e);
-            // Write the error to hio
-            let mut stdout = hio::hstdout().unwrap();
-            writeln!(stdout, "Error: {:#?}", wrapped).unwrap();
-            //
-            // Store the error if it is the first one that occured
-            if $storage.is_none() {
-                $storage = Some(wrapped);
-            }
+            let wrapped = e.into();
+
+            /*
+            let mut hio = hio::hstdout().unwrap();
+            writeln!(
+                hio,
+                "ReadLoopError: {:?}",
+                wrapped
+            ).unwrap();
+            */
+
+            match send_loop_error(&mut $esp, &wrapped) {
+                Ok(()) => {},
+                Err(send_err) => {
+                    /*
+                    writeln!(
+                        hio,
+                        "Failed to send error, storing for future: {:?}",
+                        send_err
+                    ).unwrap();
+                    */
+
+                    // Store the error if it is the first one that occured
+                    if $storage.is_none() {
+                        $storage = Some(wrapped);
+                    }
+                }
+            };
         }
     }
 }
@@ -134,18 +154,7 @@ fn main() -> ! {
     loop {
         // Try to send an error message if an error occured
         let should_clear_error = if let Some(ref err) = last_error {
-            let mut buff = arrayvec::ArrayString::<[u8; 256]>::new();
-            writeln!(buff, ";Fatal: {:?}", err)
-                .expect("Fatal: Failed to send previous error to server");
-
-            let send_result = esp8266.send_data(
-                esp8266::ConnectionType::Tcp,
-                IP_ADDRESS,
-                2000,
-                &buff
-            );
-
-            match send_result {
+            match send_loop_error(&mut esp8266, err) {
                 Ok(()) => true,
                 Err(_) => false
             }
@@ -167,8 +176,8 @@ fn main() -> ! {
             &mut dhtxx_debug_pin
         );
         dhtxx_pin = returned_pin;
-        handle_result!(result, last_error);
-        handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error);
+        handle_result!(result, last_error, esp8266);
+        handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
 
         for _i in 0..SLEEP_ITERATIONS {
             esp8266.power_down();
@@ -176,10 +185,30 @@ fn main() -> ! {
             // misc_timer.listen(stm32f103xx_hal::timer::Event::Update);
             // asm::wfi();
             block!(misc_timer.wait()).unwrap();
-            esp8266.power_up().expect("Failed to power up esp8266");
+            esp8266.pull_some_current();
         }
     }
 }
+
+fn send_loop_error(esp: &mut types::EspType, err: &error::ReadLoopError)
+    -> Result<(), error::EspTransmissionError>
+{
+    let mut buff = arrayvec::ArrayString::<[u8; 256]>::new();
+    writeln!(buff, ";Fatal: {:?}", err)
+        .expect("Fatal: err string buff was too small in send_loop_error");
+
+    send_data(esp, &buff)
+}
+
+fn send_data(esp: &mut types::EspType, data: &str) -> Result<(), error::EspTransmissionError> {
+        esp.send_data(
+            esp8266::ConnectionType::Tcp,
+            IP_ADDRESS,
+            PORT,
+            &data
+        )
+}
+
 
 fn read_and_send_wind_speed(
     esp8266: &mut types::EspType,
@@ -190,13 +219,9 @@ fn read_and_send_wind_speed(
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
     communication::encode_f32("wind_raw", result, &mut encoding_buffer)?;
 
-    Ok(esp8266.send_data(
-        esp8266::ConnectionType::Tcp,
-        IP_ADDRESS,
-        2000,
-        &encoding_buffer
-    )?)
+    Ok(send_data(esp8266, &encoding_buffer)?)
 }
+
 
 fn read_and_send_dht_data(
     esp8266: &mut types::EspType,
@@ -220,24 +245,14 @@ fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Resul
         communication::encode_f32("humidity", reading.humidity, &mut encoding_buffer)?;
 
         // let a = 0;
-        esp8266.send_data(
-            esp8266::ConnectionType::Tcp,
-            IP_ADDRESS,
-            2000,
-            &encoding_buffer
-        )?;
+        send_data(esp8266, &encoding_buffer)?;
     }
     {
         let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
         communication::encode_f32("temperature", reading.temperature, &mut encoding_buffer)?;
 
         // let a = 0;
-        esp8266.send_data(
-            esp8266::ConnectionType::Tcp,
-            IP_ADDRESS,
-            2000,
-            &encoding_buffer
-        )?;
+        send_data(esp8266, &encoding_buffer)?;
     }
 
     Ok(())
@@ -257,9 +272,3 @@ exception!(*, default_handler);
 fn default_handler(irqn: i16) {
     panic!("Unhandled exception (IRQn = {})", irqn);
 }
-/*
-   Pinout:
-
-   USART1_TX: PA9
-   USART1_RX: PA10
- */

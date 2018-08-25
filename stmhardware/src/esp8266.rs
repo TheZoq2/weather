@@ -224,13 +224,30 @@ where Tx: hal::serial::Write<u8>,
 
         // The esp01 sends a bunch of garbage over the serial port before starting properly,
         // therefore we need to retry this until we get valid data or time out
+        let mut error_count = 0;
         loop {
             match self.wait_for_got_ip(STARTUP_TIMEOUT.into()) {
                 Ok(()) => return Ok(()),
                 e @ Err(Error::RxError(serial::Error::TimedOut)) => return e,
-                _ => continue
+                e => {
+                    if error_count < 255 {
+                        error_count += 1;
+                        continue
+                    }
+                    else {
+                        return e
+                    }
+                }
             }
         }
+    }
+
+    pub fn pull_some_current(&mut self) {
+        self.chip_enable_pin.set_high();
+
+        self.timer.start_real(Microsecond(500));
+        block!(self.timer.wait()).unwrap();
+        self.chip_enable_pin.set_low();
     }
 
     fn transmit_data(&mut self, data: &str) -> return_type!(()) {
