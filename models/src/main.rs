@@ -1,10 +1,13 @@
+mod battery;
+
 #[macro_use]
 extern crate scad_generator;
 extern crate scad_util;
 use scad_generator::*;
 
+
 use scad_util::compositions::object_at_corners;
-use scad_util::constants::{x_axis, z_axis};
+use scad_util::constants::{x_axis, y_axis, z_axis};
 use scad_util::shapes::cut_triangle;
 
 qstruct!(Anemometer() {
@@ -249,15 +252,6 @@ qstruct!(Housing() {
 });
 
 impl Housing {
-    fn assembly(&self) -> ScadObject {
-        scad!(Union; {
-            self.watertight_section(),
-            scad!(Translate(vec3(0., 55., 0.)); self.water_seal()),
-            scad!(Translate(vec3(0., 80., 0.)); self.sensor_section()),
-            scad!(Translate(vec3(0., 90., 0.)); self.wire_hole_water_seal(2.)),
-            scad!(Translate(vec3(0., 100., 0.)); self.wire_hole_cover()),
-        })
-    }
 
     fn outer_shape(&self, screwhole_diameter: f32, y_size: f32) -> ScadObject {
         // Componnents
@@ -521,6 +515,108 @@ impl Housing {
 
 }
 
+fn full_assembly() -> ScadObject {
+    let housing = Housing::new();
+    scad!(Union; {
+        housing.watertight_section(),
+        scad!(Translate(vec3(0., 55., 0.)); housing.water_seal()),
+        scad!(Translate(vec3(0., 80., 0.)); housing.sensor_section()),
+        scad!(Translate(vec3(0., 90., 0.)); housing.wire_hole_water_seal(2.)),
+        scad!(Translate(vec3(0., 100., 0.)); housing.wire_hole_cover()),
+        scad!(Translate(vec3(0., 0., -70.)); scad!(Rotate(90., x_axis()); wall_mount())),
+        scad!(Translate(vec3(100., 0., -50.)); battery::Powerbank::new().container()),
+        scad!(Translate(vec3(100., 0., 70.)); battery::Powerbank::new().lid())
+    })
+}
+
+fn wall_mount() -> ScadObject {
+    let housing = Housing::new();
+    let screwhole_pad = {
+        let screwhole_diameter = 4.;
+        let outer_diameter = 7.;
+        let separation = 50.;
+        let thickness = 4.;
+
+        let place_at_screwholes = |obj: ScadObject| {
+            scad!(Union; {
+                scad!(Translate(
+                    x_axis() * (separation/2.) + outer_diameter / 2. * y_axis()
+                ); obj.clone()),
+                scad!(Translate(
+                    -x_axis() * (separation/2.) + outer_diameter / 2. * y_axis()
+                ); obj.clone())
+            })
+        };
+
+        let outer = scad!(Hull; {
+            place_at_screwholes(
+                scad!(Cylinder(thickness, Diameter(outer_diameter)))
+            )
+        });
+
+        scad!(Difference; {
+            outer,
+            place_at_screwholes(
+                scad!(Cylinder(
+                    thickness,
+                    Diameter(screwhole_diameter)
+                ))
+            )
+        })
+    };
+
+    let z_size = 23.;
+    let extrude_params = LinExtrudeParams{height: z_size, .. Default::default()};
+    let side_thickness = 5.;
+    let padding = 0.5;
+
+    let main_body = {
+        let y_size = housing.battery_mount_z_len;
+        let lower_length = housing.battery_mount_lower_len + side_thickness;
+        let upper_length = housing.battery_mount_upper_len + side_thickness;
+
+        let polygon = PolygonParameters::new(vec!(
+                    vec2(upper_length / 2., 0.),
+                    vec2(upper_length / 2., side_thickness - padding),
+                    vec2(lower_length / 2., side_thickness + y_size),
+                    vec2(-lower_length / 2., side_thickness + y_size),
+                    vec2(-upper_length / 2., side_thickness - padding),
+                    vec2(-upper_length / 2., 0.),
+                ));
+
+        scad!(LinearExtrude(extrude_params.clone()); {
+            scad!(Polygon(polygon))
+        })
+    };
+
+    let cutout = {
+        let offset = side_thickness - padding;
+        let y_size = housing.battery_mount_z_len + padding;
+        let lower_length = housing.battery_mount_lower_len + padding * 2.;
+        let upper_length = housing.battery_mount_upper_len + padding * 2.;
+
+
+        let polygon = PolygonParameters::new(vec!(
+                    vec2(upper_length / 2., offset + 0.),
+                    vec2(lower_length / 2., offset + y_size),
+                    vec2(-lower_length / 2., offset + y_size),
+                    vec2(-upper_length / 2., offset + 0.),
+                ));
+
+        scad!(LinearExtrude(extrude_params.clone()); {
+            scad!(Polygon(polygon))
+        })
+    };
+
+    scad!(Difference; {
+        scad!(Union; {
+            main_body,
+            screwhole_pad
+        }),
+        cutout
+    })
+}
+
 fn save_file(filename: &str, object: ScadObject) {
     let mut sfile = ScadFile::new();
 
@@ -536,9 +632,12 @@ fn main() {
     save_file("arm.scad", anemometer.arm());
     save_file("hub.scad", anemometer.hub());
     save_file("anemometer_base.scad", anemometer.base());
-    save_file("housingAssembly.scad", Housing::new().assembly());
+    save_file("housingAssembly.scad", full_assembly());
     save_file("watertight_section.scad", Housing::new().watertight_section());
     save_file("waterSeal.scad", Housing::new().water_seal());
     save_file("wire_hole_water_seal.scad", Housing::new().wire_hole_water_seal(2.));
     save_file("wire_hole_cover.scad", Housing::new().wire_hole_cover());
+    save_file("wallmount.scad", wall_mount());
+    save_file("battery_box.scad", battery::Powerbank::new().container());
+    save_file("battery_box_lid.scad", battery::Powerbank::new().lid());
 }
