@@ -44,14 +44,14 @@ pub fn run_server(listen_address: String, port: u16, readings: ReadingCollection
         let request_path = request.uri().path();
         let request_path_parts = request_path.split('/').collect::<Vec<_>>();
 
-        let handled = match request_path_parts[1] {
+        let (handled, content_type) = match request_path_parts[1] {
             "" => {
-                handle_index_request()
+                (handle_index_request(), "text/html")
             }
             "data" => {
-                handle_data_request_query(&request_path_parts, &readings)
+                (handle_data_request_query(&request_path_parts, &readings), "text/plain")
             }
-            _ => Err(ErrorKind::UnhandledURI(request_path.to_string()).into())
+            _ => (Err(ErrorKind::UnhandledURI(request_path.to_string()).into()), "text/plain")
         };
 
         let request_response = match handled {
@@ -63,6 +63,7 @@ pub fn run_server(listen_address: String, port: u16, readings: ReadingCollection
         };
 
         response.header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+        response.header(header::CONTENT_TYPE, content_type);
         //Ok(response.body(request_response.as_bytes())?)
         Ok(response.body(request_response.into_bytes())?)
     });
