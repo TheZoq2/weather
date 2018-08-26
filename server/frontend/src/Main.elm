@@ -251,7 +251,7 @@ serverUrlFromLocation : Navigation.Location -> String
 serverUrlFromLocation location =
     case String.uncons location.hash of
         Just (hash, url) -> url
-        Nothing -> "localhost:8080"
+        Nothing -> location.host
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
