@@ -57,14 +57,15 @@ mod error;
 
 type ErrorString = arrayvec::ArrayString<[u8; 128]>;
 
-// const IP_ADDRESS: &str = "46.59.41.53";
-const IP_ADDRESS: &str = "192.168.0.11";
+const IP_ADDRESS: &str = "46.59.41.53";
+// const IP_ADDRESS: &str = "192.168.0.11";
 const PORT: u16 = 2000;
 // const READ_INTERVAL: Second = Second(60*5);
 // const READ_INTERVAL: Second = Second(30);
 // Sleep for 5 minutes between reads, but wake up once every 10 seconds seconds
 // to keep power banks from shutting down the psu
 const WAKEUP_INTERVAL: Second = Second(10);
+// const SLEEP_ITERATIONS: u8 = 2;
 const SLEEP_ITERATIONS: u8 = 6 * 5;
 
 macro_rules! handle_result {
@@ -72,25 +73,24 @@ macro_rules! handle_result {
         if let Err(e) = $result {
             let wrapped = e.into();
 
-            /*
-            let mut hio = hio::hstdout().unwrap();
-            writeln!(
-                hio,
-                "ReadLoopError: {:?}",
-                wrapped
-            ).unwrap();
-            */
+            let _hio_result = hio::hstdout().map(|mut hio| {
+                writeln!(
+                    hio,
+                    "ReadLoopError: {:?}",
+                    wrapped
+                )
+            });
 
             match send_loop_error(&mut $esp, &wrapped) {
                 Ok(()) => {},
                 Err(send_err) => {
-                    /*
-                    writeln!(
-                        hio,
-                        "Failed to send error, storing for future: {:?}",
-                        send_err
-                    ).unwrap();
-                    */
+                    let _hio_result = hio::hstdout().map(|mut hio| {
+                        writeln!(
+                            hio,
+                            "Failed to send error, storing for future: {:?}",
+                            send_err
+                        )
+                    });
 
                     // Store the error if it is the first one that occured
                     if $storage.is_none() {
@@ -179,14 +179,16 @@ fn main() -> ! {
         handle_result!(result, last_error, esp8266);
         handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
 
+        esp8266.power_down();
         for _i in 0..SLEEP_ITERATIONS {
-            esp8266.power_down();
+            esp8266.pull_some_current();
             misc_timer.start_real(WAKEUP_INTERVAL);
             // misc_timer.listen(stm32f103xx_hal::timer::Event::Update);
             // asm::wfi();
             block!(misc_timer.wait()).unwrap();
-            esp8266.pull_some_current();
         }
+
+        handle_result!(esp8266.power_up(), last_error, esp8266);
     }
 }
 
