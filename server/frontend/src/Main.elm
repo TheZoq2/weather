@@ -1,103 +1,26 @@
 module Main exposing (..) 
+
 import Html exposing (..)
-import Html.Attributes
 import Html.Events
-import Http
 import Time exposing (Time, second)
-import Json.Decode as Decode
 import Svg
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Dict exposing (Dict)
 import List.Extra
 import Navigation
+import Style
 
 import Graph
 import Time
 import Msg exposing (Msg(..))
+import Model exposing (Model)
+import View exposing (view)
 import Requests exposing (sendAvailableDataQuery, sendValueRequest)
-import Views
 
 import Constants exposing (day)
 
-type alias ReadingProperty =
-    { valueRangeFn: List (Time, Float) -> (Float, Float)
-    , preprocessor: List (Time, Float) -> List(Time, Float)
-    , separation: Float
-    , unitName: String
-    , graphHeight: Int
-    }
 
-
-stepPreprocessor : List (Time, Float) -> List (Time, Float)
-stepPreprocessor original =
-    let
-        duplicated = List.Extra.interweave original original
-
-        (times, values) = List.unzip duplicated
-
-        shiftedTimes = List.drop 1 times
-    in
-        List.Extra.zip shiftedTimes values
-
-readingProperties : String -> ReadingProperty
-readingProperties name =
-    let
-        binaryReading =
-            { valueRangeFn = (\_ -> (0, 1))
-            , preprocessor = stepPreprocessor
-            , separation = 1
-            , unitName = ""
-            , graphHeight = 50
-            }
-
-        lastNValues n list =
-            List.drop ((List.length list) - n) list
-
-        minMaxWithLimits : Float -> List (Time, Float) -> (Float, Float) 
-        minMaxWithLimits minRange values =
-            let
-                min = Maybe.withDefault 0 <| List.minimum <| List.map Tuple.second <| values
-                max = Maybe.withDefault 0 <| List.maximum <| List.map Tuple.second <| values
-
-                range = max-min
-                padding = Maybe.withDefault 0 <| List.maximum [0, (minRange - range) / 2]
-            in
-                (min-padding, max+padding)
-
-
-        independent minRange unitName separation =
-            { valueRangeFn = minMaxWithLimits minRange
-            , preprocessor = identity
-            , separation = separation
-            , unitName = unitName
-            , graphHeight = 250
-            }
-
-    in
-        case name of
-            "channel1" -> binaryReading
-            "channel2" -> binaryReading
-            "humidity" -> independent 10 "%" 10
-            "temperature" -> independent 10 "°C" 5
-            "wind_raw" -> independent 0.5 "ve" 0.5
-            _ ->
-                { valueRangeFn = (\_ -> (0, 100))
-                , preprocessor = (\list -> list)
-                , separation = 5
-                , unitName = "-"
-                , graphHeight = 300
-                }
-
-
-type alias Model =
-    { values: Dict String (List (Time, Float))
-    , listedData: List String
-    , availableData: List String
-    -- Url of the server
-    , url: String
-    , timeRange: Time
-    }
 
 
 init : Navigation.Location -> (Model, Cmd Msg)
@@ -136,7 +59,11 @@ update msg model =
         AvailableDataReceived data ->
             case data of
                 Ok availableData ->
-                    ({model | availableData = availableData}, Cmd.none)
+                    ({ model 
+                        | availableData = availableData
+                        , listedData = availableData
+                     }
+                     , Cmd.none)
                 Err e ->
                     let
                         _ = Debug.log "Failed to get available data" e
@@ -162,90 +89,7 @@ update msg model =
             ({model | timeRange = time}, Cmd.none)
 
 
-view : Model -> Html Msg
-view model =
-    div
-        []
-        (  [ dataSelector model.availableData
-           , Views.timeSelectionButtons
-           ]
-        ++ drawValues model.timeRange model.values
-        )
 
-
-drawValues : Time -> Dict String (List (Time, Float)) -> List (Html Msg)
-drawValues timeRange values =
-    let
-        graphParamFn : ReadingProperty -> List (Time, Float) -> GraphParams
-        graphParamFn readingProperty values =
-            GraphParams 600 readingProperty.graphHeight (readingProperty.valueRangeFn values) readingProperty.separation readingProperty.unitName
-
-    in
-        List.map
-            (\(name, values) ->
-                let
-                    maxTime = List.map Tuple.first values |> List.maximum |> Maybe.withDefault 0
-                    minTime = maxTime - timeRange
-                    startEndTime = (minTime, maxTime)
-
-                    filter (time, val) = 
-                        (time <= maxTime && time >= minTime)
-
-                    displayedValues = List.filter filter values
-
-                    readingProperty = readingProperties name
-                    processedValues = readingProperty.preprocessor displayedValues
-
-                    graphParams = graphParamFn readingProperty processedValues
-                in
-                    div
-                        []
-                        ( [ p [] [Html.text name]
-                          ]
-                          ++ (drawGraph graphParams startEndTime processedValues)
-                        )
-            )
-            <| Dict.toList values
-
-
-type alias GraphParams =
-    { viewWidth: Int
-    , viewHeight: Int
-    , valueRange: (Float, Float)
-    , horizontalStep: Float
-    , unit: String
-    }
-
-drawGraph : GraphParams -> (Time, Time) -> List (Time, Float) ->  List (Html Msg)
-drawGraph {viewWidth, viewHeight, valueRange, horizontalStep, unit} startEndTime values =
-    let
-        viewDimensions = (viewWidth, viewHeight)
-    in
-        [ svg
-          [ viewBox <| "0 0 " ++ "20" ++ " " ++ (toString viewHeight)
-          , width <| toString 40 ++ "px"
-          , height <| toString viewHeight ++ "px"
-          ]
-          [ Graph.drawLegend unit viewHeight valueRange horizontalStep
-          ]
-        , svg
-          [ viewBox <| "0 0 " ++ (toString viewWidth) ++ " " ++ (toString viewHeight)
-          , width <| toString viewWidth ++ "px"
-          , height <| toString viewHeight ++ "px"
-          ]
-          [ Graph.drawHorizontalLines viewDimensions valueRange horizontalStep
-          , Graph.drawGraph viewDimensions valueRange startEndTime values
-          ]
-        ]
-
-
-
-dataSelector : List String -> Html Msg
-dataSelector availableData =
-    let
-        links = List.map (\name -> Html.button [Html.Events.onClick (ToggleData name)] [Html.text name]) availableData
-    in
-        li [] links
 
 serverUrlFromLocation : Navigation.Location -> String
 serverUrlFromLocation location =
@@ -264,7 +108,7 @@ main =
         UrlChanged
         { init = init
         , update = update
-        , view = view
+        , view = View.view
         , subscriptions = subscriptions
         }
 
