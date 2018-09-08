@@ -20,10 +20,10 @@ extern crate cortex_m_semihosting;
 #[macro_use(entry, exception)]
 extern crate cortex_m_rt as rt;
 
-extern crate embedded_hal as hal;
-extern crate embedded_hal_time;
+extern crate embedded_hal as hal; extern crate embedded_hal_time;
 //extern crate stm32f30x_hal;
 extern crate stm32f103xx_hal;
+#[macro_use(interrupt)]
 extern crate stm32f103xx;
 extern crate arrayvec;
 extern crate panic_semihosting;
@@ -44,7 +44,7 @@ use stm32f103xx_hal::time::{Hertz, MonoTimer};
 use stm32f103xx_hal::timer::Timer;
 use stm32f103xx_hal::gpio::gpioa::{CRL};
 use stm32f103xx_hal::gpio::gpiob;
-use stm32f103xx::TIM4;
+use stm32f103xx::{TIM4, TIM3};
 use embedded_hal_time::{RealCountDown, Microsecond, Second, Millisecond};
 
 mod serial;
@@ -57,16 +57,18 @@ mod error;
 
 type ErrorString = arrayvec::ArrayString<[u8; 128]>;
 
-const IP_ADDRESS: &str = "46.59.41.53";
-// const IP_ADDRESS: &str = "192.168.0.11";
+// const IP_ADDRESS: &str = "46.59.41.53";
+const IP_ADDRESS: &str = "192.168.0.11";
+// const IP_ADDRESS: &str = "192.168.0.12";
 const PORT: u16 = 2000;
 // const READ_INTERVAL: Second = Second(60*5);
 // const READ_INTERVAL: Second = Second(30);
 // Sleep for 5 minutes between reads, but wake up once every 10 seconds seconds
 // to keep power banks from shutting down the psu
 const WAKEUP_INTERVAL: Second = Second(10);
-// const SLEEP_ITERATIONS: u8 = 2;
-const SLEEP_ITERATIONS: u8 = 6 * 5;
+// const SLEEP_ITERATIONS: u8 = 6;
+const SLEEP_ITERATIONS: u8 = 1;
+
 
 macro_rules! handle_result {
     ($result:expr, $storage:ident, $esp:ident) => {
@@ -102,18 +104,22 @@ macro_rules! handle_result {
     }
 }
 
-entry!(main);
+interrupt!(TIM3, timer_interrupt);
+static mut WAKEUP_TIMER: Option<Timer<TIM3>> = None;
 
+entry!(main);
 fn main() -> ! {
     let mut last_error: Option<error::ReadLoopError> = None;
 
     // These errors are unrecoverable so we do not save any errors here
     let p = stm32f103xx::Peripherals::take().unwrap();
+    let cp = stm32f103xx::CorePeripherals::take().unwrap();
 
     let mut flash = p.FLASH.constrain();
     let mut rcc = p.RCC.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
+    let mut nvic = cp.NVIC;
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
@@ -139,15 +145,20 @@ fn main() -> ! {
     let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
 
 
-    let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
-    // TODO: Use internal pull up instead
-    let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
-    let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
+    // let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
+    // // TODO: Use internal pull up instead
+    // let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
+    // let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
 
     let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
     let mut dhtxx = dhtxx::Dhtxx::new();
 
     let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
+
+    unsafe {
+        WAKEUP_TIMER = Some(Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1));
+    }
+    nvic.enable(stm32f103xx::Interrupt::TIM3);
 
     // esp8266.communicate("+CWJAP?").unwrap();
 
@@ -177,18 +188,34 @@ fn main() -> ! {
         );
         dhtxx_pin = returned_pin;
         handle_result!(result, last_error, esp8266);
-        handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
+        // handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
 
         esp8266.power_down();
         for _i in 0..SLEEP_ITERATIONS {
             esp8266.pull_some_current();
-            misc_timer.start_real(WAKEUP_INTERVAL);
-            // misc_timer.listen(stm32f103xx_hal::timer::Event::Update);
-            // asm::wfi();
-            block!(misc_timer.wait()).unwrap();
+            unsafe {
+                WAKEUP_TIMER.as_mut().unwrap().start_real(WAKEUP_INTERVAL);
+                WAKEUP_TIMER.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
+            }
+            asm::wfi();
+            // block!(misc_timer.wait()).unwrap();
         }
+        misc_timer.unlisten(stm32f103xx_hal::timer::Event::Update);
 
         handle_result!(esp8266.power_up(), last_error, esp8266);
+    }
+}
+
+
+fn timer_interrupt() {
+    let mut cp = unsafe {
+        stm32f103xx::CorePeripherals::steal()
+    };
+    cp.NVIC.clear_pending(stm32f103xx::Interrupt::TIM4);
+
+    // Reset the interrupt
+    unsafe {
+        WAKEUP_TIMER.as_mut().unwrap().wait();
     }
 }
 
