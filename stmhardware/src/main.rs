@@ -37,6 +37,7 @@ use rt::ExceptionFrame;
 use cortex_m_semihosting::hio;
 use core::fmt::Write;
 
+use stm32f103xx_hal::rtc::Rtc;
 use stm32f103xx_hal::prelude::*;
 use stm32f103xx_hal::serial::{Serial};
 //use stm32f103xx_hal::stm32f103xx::{self};
@@ -112,14 +113,22 @@ fn main() -> ! {
     let mut last_error: Option<error::ReadLoopError> = None;
 
     // These errors are unrecoverable so we do not save any errors here
-    let p = stm32f103xx::Peripherals::take().unwrap();
+    let mut p = stm32f103xx::Peripherals::take().unwrap();
     let cp = stm32f103xx::CorePeripherals::take().unwrap();
+
+    let mut rtc = Rtc::rtc(p.RTC, &mut p.RCC);
 
     let mut flash = p.FLASH.constrain();
     let mut rcc = p.RCC.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut nvic = cp.NVIC;
+    let mut system_control_block = cp.SCB;
+    
+    let mut exti = p.EXTI;
+    let ref mut exti_emr = &mut exti.emr;
+    let mut pwr_cr = p.PWR.cr;
+
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
@@ -189,8 +198,10 @@ fn main() -> ! {
         );
         dhtxx_pin = returned_pin;
 
+        // Power up esp8266 to send data
         handle_result!(esp8266.power_up(), last_error, esp8266);
 
+        // Send the data if the read was successful
         let dht_result = dht_read_result.map(|reading| {
             let send_result = send_dht_data(&mut esp8266, reading);
             handle_result!(send_result, last_error, esp8266);
@@ -199,14 +210,22 @@ fn main() -> ! {
 
         // handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
 
+        // Power down
         esp8266.power_down();
         for _i in 0..SLEEP_ITERATIONS {
-            esp8266.pull_some_current();
-            unsafe {
-                WAKEUP_TIMER.as_mut().unwrap().start_real(WAKEUP_INTERVAL);
-                WAKEUP_TIMER.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
-            }
-            asm::wfi();
+            // Configure rtc to 
+            // unsafe {
+            //     WAKEUP_TIMER.as_mut().unwrap().start_real(WAKEUP_INTERVAL);
+            //     WAKEUP_TIMER.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
+            // }
+            stop_mode(
+                &mut exti_emr,
+                &mut system_control_block,
+                &mut pwr_cr,
+                &mut rtc,
+                10,
+            );
+            // asm::wfi();
             // block!(misc_timer.wait()).unwrap();
         }
         misc_timer.unlisten(stm32f103xx_hal::timer::Event::Update);
@@ -291,6 +310,51 @@ fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Resul
 
     Ok(())
 }
+
+
+/**
+  Puts the CPU into stop mode. Before this is done, wakeup has to
+  be configured. See page 75 of datasheet for info
+
+  Additionally, all pending interrupts need to be clear
+
+  To exit stop mode
+*/
+fn stop_mode(
+    exti_emr: &mut stm32f103xx::exti::EMR,
+    system_control_block: &mut cortex_m::peripheral::SCB,
+    pwr_control: &mut stm32f103xx::pwr::CR,
+    rtc: &mut Rtc,
+    time_seconds: u32
+) {
+    rtc.set_alarm(time_seconds);
+
+    // Set SLEEPDEEP in cortex-m3 system control register
+    unsafe {
+        system_control_block.scr.modify(|prev_value| {
+            // Write a 1 in SLEEPDEEP flag
+            // http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0552a/Cihhjgdh.html
+            prev_value | 0b100
+        });
+    }
+
+    // Clear PDDS bit in PWR_CR to enable stop mode
+    // Set voltage regulator mode using LDPS in PWR_CR
+    pwr_control.modify(|_r, w| {
+        // Enable stop mode
+        w.pdds().clear_bit()
+        // Voltage regulators to low power mode
+         .lpds().set_bit()
+    });
+
+    // Enable RTCAlarm event
+    exti_emr.modify(|_r, w| w.mr17().set_bit());
+    // Maybe set rising or falling edge as well
+
+    // Call asm::wfi() or asm::wfe()
+    asm::wfe();
+}
+
 
 
 // define the hard fault handler
