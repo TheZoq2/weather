@@ -140,6 +140,8 @@ fn main() -> ! {
     let (tx, rx) = serial.split();
     let mut esp8266 = esp8266::Esp8266::new(tx, rx, esp_timer, esp_reset)
         .expect("Failed to initialise esp8266");
+    // Power the device down because we don't need it right now
+    esp8266.power_down();
 
 
     let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
@@ -178,8 +180,7 @@ fn main() -> ! {
             last_error = None;
         }
 
-        let (returned_pin, result) = read_and_send_dht_data(
-            &mut esp8266,
+        let (returned_pin, dht_read_result) = read_dht_data(
             &mut dhtxx,
             dhtxx_pin,
             &mut gpioa.crl,
@@ -187,7 +188,15 @@ fn main() -> ! {
             &mut dhtxx_debug_pin
         );
         dhtxx_pin = returned_pin;
-        handle_result!(result, last_error, esp8266);
+
+        handle_result!(esp8266.power_up(), last_error, esp8266);
+
+        let dht_result = dht_read_result.map(|reading| {
+            let send_result = send_dht_data(&mut esp8266, reading);
+            handle_result!(send_result, last_error, esp8266);
+        });
+        handle_result!(dht_result, last_error, esp8266);
+
         // handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
 
         esp8266.power_down();
@@ -201,8 +210,6 @@ fn main() -> ! {
             // block!(misc_timer.wait()).unwrap();
         }
         misc_timer.unlisten(stm32f103xx_hal::timer::Event::Update);
-
-        handle_result!(esp8266.power_up(), last_error, esp8266);
     }
 }
 
@@ -251,19 +258,17 @@ fn read_and_send_wind_speed(
     Ok(send_data(esp8266, &encoding_buffer)?)
 }
 
-
-fn read_and_send_dht_data(
-    esp8266: &mut types::EspType,
+fn read_dht_data(
     dht: &mut types::DhtType,
     pin: dhtxx::OutPin,
     crl: &mut CRL,
     timer: &mut Timer<TIM4>,
     debug_pin: &mut dhtxx::DebugPin
-) -> (dhtxx::OutPin, Result<(), error::DhtError>) {
+) -> (dhtxx::OutPin, Result<dhtxx::Reading, error::DhtError>) {
     let (pin, reading) = dht.make_reading(pin, crl, timer, debug_pin);
 
     match reading {
-        Ok(reading) => (pin, send_dht_data(esp8266, reading)),
+        Ok(reading) => (pin, Ok(reading)),
         Err(e) => (pin, Err(error::DhtError::Dht(e)))
     }
 }
