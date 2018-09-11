@@ -79,12 +79,7 @@ where
             Err(Error::TimedOut) => {
                 // If the remote end has already sent bytes and has now
                 // stopped, we assume the transmission has ended
-                if byte_amount != 0 {
-                    return Err(Error::TimedOut);
-                }
-                else {
-                    continue;
-                }
+                return Err(Error::TimedOut);
             },
             Err(e) => {
                 return Err(e)

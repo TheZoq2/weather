@@ -1,10 +1,17 @@
+#![no_std]
+
+
+#[macro_use(block)]
+extern crate nb;
+
+extern crate embedded_hal as hal;
+extern crate stm32f103xx_hal;
+extern crate cortex_m;
+extern crate embedded_hal_time;
+
 use stm32f103xx_hal::gpio::{Output, Input, PushPull, Floating};
 use stm32f103xx_hal::gpio::gpioa::{PA0, PA2, CRL};
-use stm32f103xx_hal::gpio::gpiob::{PB12};
 use hal::prelude::*;
-use hal::digital::InputPin;
-
-use cortex_m::asm;
 
 use embedded_hal_time::{RealCountDown, Microsecond, Millisecond};
 
@@ -125,16 +132,6 @@ fn wait_for_pin_with_timeout<T>(pin: &InPin, pin_high: bool, timeout: Microsecon
     }
 }
 
-
-fn wait_for_us<T>(timeout: Microsecond, timer: &mut T)
-where
-    T: DhtTimer
-{
-    timer.start_real(timeout);
-
-    // Result<, !> can be safely unwrapped
-    block!(timer.wait()).unwrap();
-}
 fn wait_for_ms<T>(timeout: Millisecond, timer: &mut T)
 where
     T: DhtTimer
@@ -164,11 +161,11 @@ fn decode_dht_data(data: &[u8;5]) -> Result<Reading, Error> {
 
     // Humidity is simply a 16 bit number
     // let humidity = ((data[0] as u16) << 8) + (data[1] as u16);
-    let humidity = data[0] as f32 + ((data[1] as f32) * 0.1);
+    let humidity = (256. * data[0] as f32 + (data[1] as f32)) * 0.1;
 
     // Absolute value of the temperature is the 15 least significant bits of the reading
     // let temperature_abs = (((data[2] & 0x7f) as u16) << 8) + (data[3] as u16);
-    let temperature_abs = (data[2] & 0x7f) as f32 + ((data[3] as f32) * 0.1);
+    let temperature_abs = (((data[2] & 0x7f) as f32) * 256. + (data[3] as f32)) * 0.1;
 
     // The sign of the temperature is negative if the msb is 1
     let temperature_negative = (data[2] & 0b10000000) == 0b10000000;

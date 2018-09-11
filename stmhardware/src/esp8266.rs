@@ -121,6 +121,9 @@ macro_rules! transmission_return_type {
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+const STARTUP_TIMEOUT: Second = Second(10);
+const DEFAULT_TIMEOUT: Second = Second(5);
+
 
 /**
   Struct for interracting with an esp8266 wifi module over USART
@@ -137,7 +140,6 @@ where Tx: hal::serial::Write<u8>,
     tx: Tx,
     rx: Rx,
     timer: Timer,
-    timeout: Millisecond,
     chip_enable_pin: Rst
 }
 
@@ -162,8 +164,7 @@ where Tx: hal::serial::Write<u8>,
     pub fn new(tx: Tx, rx: Rx, timer: Timer, chip_enable_pin: Rst)
         -> return_type!(Self)
     {
-        let timeout = Millisecond(5000);
-        let mut result = Self {tx, rx, timer, timeout, chip_enable_pin};
+        let mut result = Self {tx, rx, timer, chip_enable_pin};
 
         result.reset()?;
 
@@ -171,18 +172,9 @@ where Tx: hal::serial::Write<u8>,
         result.send_at_command("E0")?;
 
         // Make sure we got an OK from the esp
-        result.wait_for_ok()?;
+        result.wait_for_ok(DEFAULT_TIMEOUT.into())?;
 
         Ok(result)
-    }
-
-    /**
-      Sends `AT${command}` to the device and waits for it to reply
-    */
-    pub fn communicate(&mut self, command: &str) -> return_type!(())
-    {
-        self.send_at_command(command)?;
-        self.wait_for_ok()
     }
 
     pub fn send_data(
@@ -204,7 +196,7 @@ where Tx: hal::serial::Write<u8>,
 
     pub fn close_connection(&mut self) -> return_type!(()) {
         self.send_at_command("+CIPCLOSE")?;
-        self.wait_for_ok()
+        self.wait_for_ok(DEFAULT_TIMEOUT.into())
     }
 
     /**
@@ -232,20 +224,37 @@ where Tx: hal::serial::Write<u8>,
 
         // The esp01 sends a bunch of garbage over the serial port before starting properly,
         // therefore we need to retry this until we get valid data or time out
+        let mut error_count = 0;
         loop {
-            match self.wait_for_got_ip() {
+            match self.wait_for_got_ip(STARTUP_TIMEOUT.into()) {
                 Ok(()) => return Ok(()),
                 e @ Err(Error::RxError(serial::Error::TimedOut)) => return e,
-                _ => continue
+                e => {
+                    if error_count < 255 {
+                        error_count += 1;
+                        continue
+                    }
+                    else {
+                        return e
+                    }
+                }
             }
         }
     }
 
+    pub fn pull_some_current(&mut self) {
+        self.chip_enable_pin.set_high();
+
+        self.timer.start_real(Millisecond(500));
+        block!(self.timer.wait()).unwrap();
+        self.chip_enable_pin.set_low();
+    }
+
     fn transmit_data(&mut self, data: &str) -> return_type!(()) {
         self.start_transmission(data.len())?;
-        self.wait_for_prompt()?;
+        self.wait_for_prompt(DEFAULT_TIMEOUT.into())?;
         self.send_raw(data.as_bytes())?;
-        self.wait_for_ok()
+        self.wait_for_ok(DEFAULT_TIMEOUT.into())
     }
 
     fn start_tcp_connection (
@@ -268,7 +277,7 @@ where Tx: hal::serial::Write<u8>,
         self.send_raw("\",".as_bytes())?;
         self.send_raw(port_str.as_bytes())?;
         self.send_raw("\r\n".as_bytes())?;
-        self.wait_for_ok()
+        self.wait_for_ok(DEFAULT_TIMEOUT.into())
     }
 
     fn start_transmission(&mut self, message_length: usize) -> return_type!(()) {
@@ -294,12 +303,16 @@ where Tx: hal::serial::Write<u8>,
         Ok(())
     }
 
-    fn wait_for_at_response(&mut self, expected_response: &ATResponse) -> return_type!(()) {
+    fn wait_for_at_response(
+        &mut self,
+        expected_response: &ATResponse,
+        timeout: Millisecond
+    ) -> return_type!(()) {
         let mut buffer = [0; AT_RESPONSE_BUFFER_SIZE];
         let response = serial::read_until_message(
             &mut self.rx,
             &mut self.timer,
-            self.timeout,
+            timeout,
             &mut buffer,
             &parse_at_response
         );
@@ -317,21 +330,21 @@ where Tx: hal::serial::Write<u8>,
         }
     }
 
-    fn wait_for_ok(&mut self) -> return_type!(()) {
-        self.wait_for_at_response(&ATResponse::Ok)
+    fn wait_for_ok(&mut self, timeout: Millisecond) -> return_type!(()) {
+        self.wait_for_at_response(&ATResponse::Ok, timeout)
     }
-    fn wait_for_got_ip(&mut self) -> return_type!(()) {
-        self.wait_for_at_response(&ATResponse::WiFiGotIp)
+    fn wait_for_got_ip(&mut self, timeout: Millisecond) -> return_type!(()) {
+        self.wait_for_at_response(&ATResponse::WiFiGotIp, timeout)
     }
 
-    fn wait_for_prompt(&mut self) -> return_type!(()) {
+    fn wait_for_prompt(&mut self, timeout: Millisecond) -> return_type!(()) {
         let mut buffer = [0; 1];
         let result = serial::read_until_message(
             &mut self.rx,
             &mut self.timer,
-            self.timeout,
+            timeout,
             &mut buffer,
-            &|buf, ptr| {
+            &|buf, _ptr| {
                 if buf[0] == '>' as u8 {
                     Some(())
                 }

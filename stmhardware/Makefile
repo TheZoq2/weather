@@ -3,9 +3,13 @@ unexport CARGO_INCREMENTAL
 TARGET_NAME=thumbv7m-none-eabi
 PROJECT_NAME=weather
 
+
 release:
-	cargo build --release
+	make rb
 	make gdb_release
+
+rb:
+	cargo build --release
 
 all:
 	make build
@@ -30,7 +34,7 @@ gdb_release:
 esp_monitor:
 	stty -F ${DEV} inlcr
 	stty -F ${DEV} onlcr
-	screen ${DEV} 960096009600960096009600960096009600
+	screen ${DEV} 9600
 
 doc:
 	cargo doc
