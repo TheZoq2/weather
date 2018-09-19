@@ -65,7 +65,7 @@ const PORT: u16 = 2000;
 // const READ_INTERVAL: Second = Second(30);
 // Sleep for 5 minutes between reads, but wake up once every 10 seconds seconds
 // to keep power banks from shutting down the psu
-const WAKEUP_INTERVAL: Second = Second(10);
+const WAKEUP_INTERVAL: Second = Second(60*5);
 // const SLEEP_ITERATIONS: u8 = 6;
 const SLEEP_ITERATIONS: u8 = 1;
 
@@ -75,6 +75,7 @@ macro_rules! handle_result {
         if let Err(e) = $result {
             let wrapped = e.into();
 
+            /*
             let _hio_result = hio::hstdout().map(|mut hio| {
                 writeln!(
                     hio,
@@ -82,10 +83,12 @@ macro_rules! handle_result {
                     wrapped
                 )
             });
+            */
 
             match send_loop_error(&mut $esp, &wrapped) {
                 Ok(()) => {},
                 Err(send_err) => {
+                    /*
                     let _hio_result = hio::hstdout().map(|mut hio| {
                         writeln!(
                             hio,
@@ -93,6 +96,7 @@ macro_rules! handle_result {
                             send_err
                         )
                     });
+                    */
 
                     // Store the error if it is the first one that occured
                     if $storage.is_none() {
