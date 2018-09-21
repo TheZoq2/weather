@@ -1,10 +1,8 @@
 
-#![feature(proc_macro)]
 #![no_main]
 #![no_std]
 #![allow(dead_code)]
 #![allow(unused_imports)]
-#![feature(generic_associated_types)]
 #![feature(start)]
 #![feature(never_type)]
 
