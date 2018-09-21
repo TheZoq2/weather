@@ -18,8 +18,10 @@ qstruct!(Anemometer() {
     arm_height: f32 = 3.,
     l_mount_length: f32 = 8.,
     hub_hole_diameter: f32 = 3.5,
+    screwhole_diameter: f32 = 3.,
     hub_radius: f32 = 10.,
     magnet_hole_offset: f32 = hub_radius/2.,
+    sensor_depth: f32 = 1.,
 });
 
 impl Anemometer {
@@ -158,6 +160,19 @@ impl Anemometer {
         })
     }
 
+    pub fn mount(&self, screwhole_length: f32) -> ScadObject {
+        let screwhole = centered_cylinder(screwhole_length * 2., Diameter(self.screwhole_diameter));
+
+        let sensor = scad!(Translate(x_axis() * self.hub_radius / 2.); {
+            scad!(Rotate(-90., z_axis()); self.hall_sensor_cutout())
+        });
+
+        scad!(Union; {
+            screwhole,
+            sensor
+        })
+    }
+
     fn base(&self) -> ScadObject {
         let padding = 0.5;
         let thickness = 4.;
@@ -252,6 +267,16 @@ qstruct!(Housing() {
 });
 
 impl Housing {
+    fn assembly(&self) -> ScadObject {
+        scad!(Union; {
+            self.watertight_section(),
+            scad!(Translate(vec3(0., 55., 0.)); self.water_seal()),
+            scad!(Translate(vec3(0., 80., 0.)); self.sensor_section()),
+            scad!(Translate(vec3(0., 90., 0.)); self.wire_hole_water_seal(2.)),
+            scad!(Translate(vec3(0., 100., 0.)); self.wire_hole_cover()),
+            scad!(Translate(vec3(0., 130., 0.)); self.grid()),
+        })
+    }
 
     fn outer_shape(&self, screwhole_diameter: f32, y_size: f32) -> ScadObject {
         // Componnents
@@ -412,7 +437,7 @@ impl Housing {
     }
 
     pub fn wire_hole_cover(&self) -> ScadObject {
-        let thickness = 4.;
+        let thickness = 3.;
         scad!(Difference; {
             self.wire_hole_water_seal(thickness),
             centered_cube(
@@ -428,6 +453,7 @@ impl Housing {
         let screwhole_height = 4.;
         let y_size = inner_y_size + screwhole_height;
         let chin_size = 8.;
+        let battery_wire_hole_diameter = 5.;
 
         let outer = {
             let with_screwholes = self.outer_shape(self.screwhole_diameter, screwhole_height);
@@ -483,9 +509,15 @@ impl Housing {
         let anemometer_mount = {
             let anemometer = Anemometer::new();
 
-            let sensor_cutout = anemometer.hall_sensor_cutout();
-            sensor_cutout
+            let y_offset = inner_y_size / 2. + back_thickness;
+            let z_offset = self.outer_z_size / 2. - anemometer.sensor_depth;
+
+            scad!(Translate(vec3(0., y_offset, z_offset)); anemometer.mount(chin_size))
         };
+
+        let battery_hole = scad!(Translate(vec3(0., inner_y_size / 2., -self.outer_z_size / 2.)); {
+            scad!(Cylinder(chin_size, Diameter(battery_wire_hole_diameter)))
+        });
 
         scad!(Difference; {
             scad!(Union; {
@@ -493,7 +525,8 @@ impl Housing {
                     outer,
                     cutout,
                     wire_hole,
-                    anemometer_mount
+                    anemometer_mount,
+                    battery_hole
                 }),
                 grid_mounting_spots
             }),
@@ -513,6 +546,73 @@ impl Housing {
         )
     }
 
+    pub fn grid(&self) -> ScadObject {
+        let fin_amount = 10;
+        let grid_thickness = 3.;
+        let fin_length = 13.;
+        let fin_separation = (self.outer_z_size - grid_thickness) / fin_amount as f32;
+
+        let fin = {
+            let shape = scad!(Polygon(PolygonParameters::new(vec!(
+                vec2(0., 0.),
+                vec2(fin_length, fin_length),
+                vec2(fin_length + grid_thickness, fin_length),
+                vec2(grid_thickness, 0.)
+            ))));
+
+            let extruded = scad!(
+                LinearExtrude(
+                    LinExtrudeParams {height: self.outer_x_size, center: true, ..Default::default()}
+                ); {shape}
+            );
+
+            scad!(Rotate(90., y_axis()); extruded)
+        };
+
+        let offset = self.outer_z_size / 2.;
+        let mut fins = scad!(Union);
+        for i in 0..fin_amount {
+            fins.add_child(scad!(Translate(-z_axis() * (fin_separation * i as f32 - self.outer_z_size/2.)); {
+                fin.clone()
+            }));
+        }
+
+        let sides = {
+            let shape = centered_cube(
+                vec3(self.wall_thickness, fin_length, self.outer_z_size),
+                (true,false,true)
+            );
+
+            let mut result = scad!(Union);
+            let wall_offset = self.outer_x_size / 2. - self.wall_thickness / 2.;
+            for i in vec!(-1., 1.) {
+                result.add_child(scad!(Translate(i * wall_offset * x_axis()); shape.clone()));
+            }
+            result
+        };
+
+        let grid_mounting_spots = self.object_at_grid_mounting_holes(
+                centered_cube(
+                    vec3(self.grid_mount_hole_padding, fin_length, self.grid_mount_hole_padding),
+                    (true, false, true)
+                )
+            );
+
+        let grid_mounting_holes = {
+            let shape = scad!(Cylinder(fin_length, Diameter(self.screwhole_diameter)));
+            let rotated = scad!(Rotate(-90., x_axis()); shape);
+            self.object_at_grid_mounting_holes(rotated)
+        };
+
+        scad!(Difference; {
+            scad!(Union; {
+                sides,
+                fins,
+                grid_mounting_spots
+            }),
+            grid_mounting_holes
+        })
+    }
 }
 
 fn full_assembly() -> ScadObject {
@@ -637,6 +737,8 @@ fn main() {
     save_file("waterSeal.scad", Housing::new().water_seal());
     save_file("wire_hole_water_seal.scad", Housing::new().wire_hole_water_seal(2.));
     save_file("wire_hole_cover.scad", Housing::new().wire_hole_cover());
+    save_file("sensor_section.scad", Housing::new().sensor_section());
+    save_file("grid_section.scad", Housing::new().grid());
     save_file("wallmount.scad", wall_mount());
     save_file("battery_box.scad", battery::Powerbank::new().container());
     save_file("battery_box_lid.scad", battery::Powerbank::new().lid());
