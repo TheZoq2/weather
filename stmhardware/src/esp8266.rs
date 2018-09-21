@@ -9,8 +9,6 @@ use core::fmt::{self, Write};
 use arrayvec::{CapacityError, ArrayString};
 use itoa;
 
-// use hal::prelude::*;
-
 
 use serial;
 
@@ -22,7 +20,10 @@ use serial;
 const AT_RESPONSE_BUFFER_SIZE: usize = 13;
 
 /**
-  Possible responses from an esp8266 AT command
+  Possible responses from an esp8266 AT command.
+
+  This does not contain all possible responses but it does contain
+  ever response that can be received from the commands sent in this crates
 */
 #[derive(Debug, PartialEq)]
 pub enum ATResponse {
@@ -71,6 +72,9 @@ pub enum TransmissionStep {
     Send,
     Close
 }
+/**
+  Error indicating failure to transmit a message.
+*/
 #[derive(Debug)]
 pub struct TransmissionError<R, T> {
     step: TransmissionStep,
