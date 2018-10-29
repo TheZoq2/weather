@@ -1,5 +1,3 @@
-#![feature(plugin)]
-//#![plugin(clippy)]
 
 use std::net::{TcpListener};
 

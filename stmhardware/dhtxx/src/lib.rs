@@ -75,7 +75,7 @@ impl Dhtxx
         // Start of actual data
         let data = self.read_data(&pin, timer, debug_pin)?;
 
-        decode_dht_data(&data)
+        decode_dht_data(data)
     }
 
 
@@ -97,12 +97,12 @@ impl Dhtxx
                 debug_pin.set_high();
 
                 // Wait for the pin to go low. If it does in 28 us this bit is a 0
-                if let Ok(_) = wait_for_pin_with_timeout(&pin, false, Microsecond(28 + TIMEOUT_PADDING), timer) {
+                if wait_for_pin_with_timeout(&pin, false, Microsecond(28 + TIMEOUT_PADDING), timer).is_ok() {
                     // data[byte] &= ~(1 << index);
-                    data[byte] = data[byte] << 1;
+                    data[byte] <<= 1;
                     debug_pin.set_low();
                 }
-                else if let Ok(_) = wait_for_pin_with_timeout(&pin, false, Microsecond(70-28), timer) {
+                else if wait_for_pin_with_timeout(&pin, false, Microsecond(70-28), timer).is_ok() {
                     data[byte] = (data[byte] << 1) | 1;
                     debug_pin.set_low();
                 }
@@ -148,7 +148,7 @@ where
 
   https://github.com/adafruit/DHT-sensor-library/blob/master/DHT.cpp
 */
-fn decode_dht_data(data: &[u8;5]) -> Result<Reading, Error> {
+fn decode_dht_data(data: [u8;5]) -> Result<Reading, Error> {
     // Check the parity bit
     let mut parity: u8 = 0;
     for bit in 0..data.len()-1 {
@@ -168,7 +168,7 @@ fn decode_dht_data(data: &[u8;5]) -> Result<Reading, Error> {
     let temperature_abs = (((data[2] & 0x7f) as f32) * 256. + (data[3] as f32)) * 0.1;
 
     // The sign of the temperature is negative if the msb is 1
-    let temperature_negative = (data[2] & 0b10000000) == 0b10000000;
+    let temperature_negative = (data[2] & 0b1000_0000) == 0b1000_0000;
 
     // Apply the sign
     let temperature = if temperature_negative {
