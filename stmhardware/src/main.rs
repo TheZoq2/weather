@@ -27,6 +27,7 @@ extern crate arrayvec;
 extern crate panic_semihosting;
 extern crate itoa;
 extern crate dhtxx;
+extern crate void;
 
 use cortex_m::asm;
 use rt::ExceptionFrame;
@@ -239,12 +240,12 @@ fn send_loop_error(esp: &mut types::EspType, err: &error::ReadLoopError)
 }
 
 fn send_data(esp: &mut types::EspType, data: &str) -> Result<(), error::EspTransmissionError> {
-        esp.send_data(
-            esp8266::ConnectionType::Tcp,
-            IP_ADDRESS,
-            PORT,
-            &data
-        )
+    esp.send_data(
+        esp8266::ConnectionType::Tcp,
+        IP_ADDRESS,
+        PORT,
+        &data
+    )
 }
 
 

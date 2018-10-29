@@ -40,6 +40,7 @@ cortex-m-semihosting = "0.3.0"
 nb = "0.1.1"
 panic-semihosting = "0.3.0"
 dhtxx = {path = "dhtxx"}
+void = {version = "1.0.2", default-features = false}
 
 [dependencies.embedded-hal]
 version = "0.2.1"
