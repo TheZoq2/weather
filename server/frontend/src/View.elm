@@ -202,6 +202,7 @@ readingProperties name =
             "humidity" -> independent 10 "%" 10 "💧"
             "temperature" -> independent 10 "°C" 5 "🌡"
             "wind_raw" -> independent 0.5 "wU" 0.5 "🍃"
+            "battery" -> independent 4.2 "V" 0.5 "🔋"
             _ ->
                 { valueRangeFn = (\_ -> (0, 100))
                 , preprocessor = (\list -> list)
