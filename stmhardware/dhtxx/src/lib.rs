@@ -15,12 +15,13 @@ use hal::prelude::*;
 
 use embedded_hal_time::{RealCountDown, Microsecond, Millisecond};
 
-const TIMEOUT_PADDING: u32 = 10;
+const TIMEOUT_PADDING: u32 = 15;
 
 pub type OutPin = PA0<Output<PushPull>>;
 type InPin = PA0<Input<Floating>>;
 
 pub type DebugPin = PA2<Output<PushPull>>;
+
 
 #[derive(Debug)]
 pub enum Error {
@@ -102,7 +103,7 @@ impl Dhtxx
                     data[byte] <<= 1;
                     debug_pin.set_low();
                 }
-                else if wait_for_pin_with_timeout(&pin, false, Microsecond(70-28), timer).is_ok() {
+                else if wait_for_pin_with_timeout(&pin, false, Microsecond(70-28 + TIMEOUT_PADDING * 2), timer).is_ok() {
                     data[byte] = (data[byte] << 1) | 1;
                     debug_pin.set_low();
                 }
