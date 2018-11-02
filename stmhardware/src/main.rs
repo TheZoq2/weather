@@ -41,9 +41,11 @@ use stm32f103xx_hal::serial::{Serial};
 //use stm32f103xx_hal::stm32f103xx::{self};
 use stm32f103xx_hal::time::{Hertz, MonoTimer};
 use stm32f103xx_hal::timer::Timer;
-use stm32f103xx_hal::gpio::gpioa::{CRL};
+use stm32f103xx_hal::gpio::{Analog};
+use stm32f103xx_hal::gpio::gpioa::{self, CRL};
 use stm32f103xx_hal::gpio::gpiob;
-use stm32f103xx::{TIM4, TIM3};
+use stm32f103xx_hal::adc::{AnalogPin, Adc};
+use stm32f103xx::{TIM4, TIM3, ADC1};
 use embedded_hal_time::{RealCountDown, Microsecond, Second, Millisecond};
 
 mod serial;
@@ -64,9 +66,11 @@ const PORT: u16 = 2000;
 // const READ_INTERVAL: Second = Second(30);
 // Sleep for 5 minutes between reads, but wake up once every 10 seconds seconds
 // to keep power banks from shutting down the psu
-const WAKEUP_INTERVAL: Second = Second(60*5);
+// const WAKEUP_INTERVAL: Second = Second(60*5);
+const WAKEUP_INTERVAL: Second = Second(5);
 // const SLEEP_ITERATIONS: u8 = 6;
 const SLEEP_ITERATIONS: u8 = 1;
+const ADC_RESOLUTION: u16 = 4096;
 
 
 macro_rules! handle_result {
@@ -160,6 +164,12 @@ fn main() -> ! {
 
     let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
+
+    let mut battery_sens_pin = gpioa.pa1.into_analog_input(&mut gpioa.crl);
+    let mut adc = Adc::adc1(p.ADC1, &mut rcc.apb2);
+
+
+
     unsafe {
         WAKEUP_TIMER = Some(Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1));
     }
@@ -183,6 +193,8 @@ fn main() -> ! {
             last_error = None;
         }
 
+        let battery_level = read_battery_voltage(&battery_sens_pin, &mut adc);
+
         let (returned_pin, dht_read_result) = read_dht_data(
             &mut dhtxx,
             dhtxx_pin,
@@ -199,12 +211,13 @@ fn main() -> ! {
             handle_result!(send_result, last_error, esp8266);
         });
         handle_result!(dht_result, last_error, esp8266);
+        handle_result!(send_battery_voltage(&mut esp8266, battery_level), last_error, esp8266);
 
         // handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
 
         esp8266.power_down();
         for _i in 0..SLEEP_ITERATIONS {
-            esp8266.pull_some_current();
+            // esp8266.pull_some_current();
             unsafe {
                 WAKEUP_TIMER.as_mut().unwrap().start_real(WAKEUP_INTERVAL);
                 WAKEUP_TIMER.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
@@ -293,6 +306,19 @@ fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Resul
     }
 
     Ok(())
+}
+
+
+
+fn read_battery_voltage(battery_sensor: &gpioa::PA1<Analog>, adc: &mut Adc<ADC1>) -> f32 {
+    ((battery_sensor.analog_read(adc) as f32) / (ADC_RESOLUTION as f32) * 4.2) + 0.10
+}
+
+fn send_battery_voltage(esp: &mut types::EspType, voltage: f32) -> Result<(), error::BatteryReadError> {
+    let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
+    communication::encode_f32("battery", voltage, &mut encoding_buffer)?;
+
+    Ok(send_data(esp, &encoding_buffer)?)
 }
 
 

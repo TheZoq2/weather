@@ -42,8 +42,15 @@ ctx_error!(EncodingError {
     CapacityError(::arrayvec::CapacityError)
 });
 
+ctx_error!(BatteryReadError {
+    Encoding(EncodingError),
+    EspTransmission(EspTransmissionError)
+});
+
 ctx_error!(ReadLoopError {
     Anemometer(AnemometerError),
     Dht(DhtError),
-    EspError(EspError)
+    EspError(EspError),
+    Battery(BatteryReadError)
 });
+
