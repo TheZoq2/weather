@@ -45,6 +45,7 @@ use stm32f103xx_hal::gpio::{Analog};
 use stm32f103xx_hal::gpio::gpioa::{self, CRL};
 use stm32f103xx_hal::gpio::gpiob;
 use stm32f103xx_hal::adc::{AnalogPin, Adc};
+use stm32f103xx_hal::rtc::Rtc;
 use stm32f103xx::{TIM4, TIM3, ADC1};
 use embedded_hal_time::{RealCountDown, Microsecond, Second, Millisecond};
 
@@ -111,8 +112,10 @@ macro_rules! handle_result {
     }
 }
 
-interrupt!(TIM3, timer_interrupt);
-static mut WAKEUP_TIMER: Option<Timer<TIM3>> = None;
+interrupt!(RTCALARM, timer_interrupt);
+// interrupt!(TIM3, timer_interrupt);
+// static mut WAKEUP_TIMER: Option<Timer<TIM3>> = None;
+static mut RTC: Option<Rtc> = None;
 
 entry!(main);
 fn main() -> ! {
@@ -127,6 +130,10 @@ fn main() -> ! {
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut nvic = cp.NVIC;
+    let mut scb = cp.SCB;
+
+    let mut pwr = p.PWR;
+    let mut exti = p.EXTI;
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
@@ -167,8 +174,6 @@ fn main() -> ! {
 
     let mut battery_sens_pin = gpioa.pa1.into_analog_input(&mut gpioa.crl);
     let mut adc = Adc::adc1(p.ADC1, &mut rcc.apb2);
-
-
 
     unsafe {
         WAKEUP_TIMER = Some(Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1));
@@ -218,11 +223,18 @@ fn main() -> ! {
         esp8266.power_down();
         for _i in 0..SLEEP_ITERATIONS {
             // esp8266.pull_some_current();
-            unsafe {
-                WAKEUP_TIMER.as_mut().unwrap().start_real(WAKEUP_INTERVAL);
-                WAKEUP_TIMER.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
-            }
-            asm::wfi();
+            // unsafe {
+            //     WAKEUP_TIMER.as_mut().unwrap().start_real(WAKEUP_INTERVAL);
+            //     WAKEUP_TIMER.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
+            // }
+            stop_mode(
+                &mut exti_emr,
+                &mut system_control_block,
+                &mut pwr_cr,
+                &mut rtc,
+                10,
+            );
+            // asm::wfi();
             // block!(misc_timer.wait()).unwrap();
         }
         misc_timer.unlisten(stm32f103xx_hal::timer::Event::Update);
@@ -320,6 +332,51 @@ fn send_battery_voltage(esp: &mut types::EspType, voltage: f32) -> Result<(), er
 
     Ok(send_data(esp, &encoding_buffer)?)
 }
+
+
+/**
+  Puts the CPU into stop mode. Before this is done, wakeup has to
+  be configured. See page 75 of datasheet for info
+
+  Additionally, all pending interrupts need to be clear
+
+  To exit stop mode
+*/
+fn stop_mode(
+    exti_emr: &mut stm32f103xx::exti::EMR,
+    system_control_block: &mut cortex_m::peripheral::SCB,
+    pwr_control: &mut stm32f103xx::pwr::CR,
+    rtc: &mut Rtc,
+    time_seconds: u32
+) {
+    rtc.set_alarm(time_seconds);
+
+    // Set SLEEPDEEP in cortex-m3 system control register
+    unsafe {
+        system_control_block.scr.modify(|prev_value| {
+            // Write a 1 in SLEEPDEEP flag
+            // http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0552a/Cihhjgdh.html
+            prev_value | 0b100
+        });
+    }
+
+    // Clear PDDS bit in PWR_CR to enable stop mode
+    // Set voltage regulator mode using LDPS in PWR_CR
+    pwr_control.modify(|_r, w| {
+        // Enable stop mode
+        w.pdds().clear_bit()
+        // Voltage regulators to low power mode
+         .lpds().set_bit()
+    });
+
+    // Enable RTCAlarm event
+    exti_emr.modify(|_r, w| w.mr17().set_bit());
+    // Maybe set rising or falling edge as well
+
+    // Call asm::wfi() or asm::wfe()
+    asm::wfe();
+}
+
 
 
 // define the hard fault handler
