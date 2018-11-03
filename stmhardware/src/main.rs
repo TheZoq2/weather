@@ -6,12 +6,10 @@
 #![feature(start)]
 #![feature(never_type)]
 
-// extern crate f3;
 #[macro_use(block)]
 extern crate nb;
 
 
-// #[macro_use]
 extern crate cortex_m;
 extern crate cortex_m_semihosting;
 
@@ -19,7 +17,6 @@ extern crate cortex_m_semihosting;
 extern crate cortex_m_rt as rt;
 
 extern crate embedded_hal as hal; extern crate embedded_hal_time;
-//extern crate stm32f30x_hal;
 extern crate stm32f103xx_hal;
 #[macro_use(interrupt)]
 extern crate stm32f103xx;
@@ -38,7 +35,6 @@ use core::fmt::Write;
 
 use stm32f103xx_hal::prelude::*;
 use stm32f103xx_hal::serial::{Serial};
-//use stm32f103xx_hal::stm32f103xx::{self};
 use stm32f103xx_hal::time::{Hertz, MonoTimer};
 use stm32f103xx_hal::timer::Timer;
 use stm32f103xx_hal::gpio::{Analog};
@@ -112,9 +108,6 @@ macro_rules! handle_result {
     }
 }
 
-interrupt!(RTCALARM, timer_interrupt);
-// interrupt!(TIM3, timer_interrupt);
-// static mut WAKEUP_TIMER: Option<Timer<TIM3>> = None;
 static mut RTC: Option<Rtc> = None;
 
 entry!(main);
@@ -179,16 +172,6 @@ fn main() -> ! {
 
     let mut rtc = Rtc::rtc(p.RTC, &mut rcc.apb1, &mut rcc.bdcr, &mut pwr);
 
-    unsafe {
-        // RTC = Some(Rtc::rtc(p.RTC, &mut rcc.apb1, &mut rcc.bdcr, &mut pwr));
-        // WAKEUP_TIMER = Some(Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1));
-    }
-    // TODO: enable RTC interrupt
-    // nvic.enable(stm32f103xx::Interrupt::TIM3);
-    // nvic.enable(stm32f103xx::Interrupt::RTCALARM);
-
-    // esp8266.communicate("+CWJAP?").unwrap();
-
     loop {
         // Try to send an error message if an error occured
         let should_clear_error = if let Some(ref err) = last_error {
@@ -229,16 +212,8 @@ fn main() -> ! {
 
         esp8266.power_down();
         for _i in 0..SLEEP_ITERATIONS {
-            // esp8266.pull_some_current();
-            // unsafe {
-            //     RTC.as_mut().unwrap().set_alarm(WAKEUP_INTERVAL.0);
-            //     // RTC.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
-            // }
-            // asm::wfi();
-            // block!(misc_timer.wait()).unwrap();
             stop_mode(&mut exti, &mut scb, &mut pwr, &mut rtc, WAKEUP_INTERVAL.0);
         }
-        // misc_timer.unlisten(stm32f103xx_hal::timer::Event::Update);
     }
 }
 
