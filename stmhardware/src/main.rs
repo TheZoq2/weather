@@ -175,10 +175,17 @@ fn main() -> ! {
     let mut battery_sens_pin = gpioa.pa1.into_analog_input(&mut gpioa.crl);
     let mut adc = Adc::adc1(p.ADC1, &mut rcc.apb2);
 
+
+
+    let mut rtc = Rtc::rtc(p.RTC, &mut rcc.apb1, &mut rcc.bdcr, &mut pwr);
+
     unsafe {
-        WAKEUP_TIMER = Some(Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1));
+        // RTC = Some(Rtc::rtc(p.RTC, &mut rcc.apb1, &mut rcc.bdcr, &mut pwr));
+        // WAKEUP_TIMER = Some(Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1));
     }
-    nvic.enable(stm32f103xx::Interrupt::TIM3);
+    // TODO: enable RTC interrupt
+    // nvic.enable(stm32f103xx::Interrupt::TIM3);
+    // nvic.enable(stm32f103xx::Interrupt::RTCALARM);
 
     // esp8266.communicate("+CWJAP?").unwrap();
 
@@ -224,20 +231,14 @@ fn main() -> ! {
         for _i in 0..SLEEP_ITERATIONS {
             // esp8266.pull_some_current();
             // unsafe {
-            //     WAKEUP_TIMER.as_mut().unwrap().start_real(WAKEUP_INTERVAL);
-            //     WAKEUP_TIMER.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
+            //     RTC.as_mut().unwrap().set_alarm(WAKEUP_INTERVAL.0);
+            //     // RTC.as_mut().unwrap().listen(stm32f103xx_hal::timer::Event::Update);
             // }
-            stop_mode(
-                &mut exti_emr,
-                &mut system_control_block,
-                &mut pwr_cr,
-                &mut rtc,
-                10,
-            );
             // asm::wfi();
             // block!(misc_timer.wait()).unwrap();
+            stop_mode(&mut exti, &mut scb, &mut pwr, &mut rtc, WAKEUP_INTERVAL.0);
         }
-        misc_timer.unlisten(stm32f103xx_hal::timer::Event::Update);
+        // misc_timer.unlisten(stm32f103xx_hal::timer::Event::Update);
     }
 }
 
@@ -246,11 +247,11 @@ fn timer_interrupt() {
     let mut cp = unsafe {
         stm32f103xx::CorePeripherals::steal()
     };
-    cp.NVIC.clear_pending(stm32f103xx::Interrupt::TIM4);
+    cp.NVIC.clear_pending(stm32f103xx::Interrupt::RTCALARM);
 
     // Reset the interrupt
     unsafe {
-        WAKEUP_TIMER.as_mut().unwrap().wait();
+        RTC.as_mut().unwrap().clear_alarm_flag();
     }
 }
 
@@ -343,9 +344,9 @@ fn send_battery_voltage(esp: &mut types::EspType, voltage: f32) -> Result<(), er
   To exit stop mode
 */
 fn stop_mode(
-    exti_emr: &mut stm32f103xx::exti::EMR,
+    exti: &mut stm32f103xx::EXTI,
     system_control_block: &mut cortex_m::peripheral::SCB,
-    pwr_control: &mut stm32f103xx::pwr::CR,
+    pwr: &mut stm32f103xx::PWR,
     rtc: &mut Rtc,
     time_seconds: u32
 ) {
@@ -362,7 +363,7 @@ fn stop_mode(
 
     // Clear PDDS bit in PWR_CR to enable stop mode
     // Set voltage regulator mode using LDPS in PWR_CR
-    pwr_control.modify(|_r, w| {
+    pwr.cr.modify(|_r, w| {
         // Enable stop mode
         w.pdds().clear_bit()
         // Voltage regulators to low power mode
@@ -370,14 +371,13 @@ fn stop_mode(
     });
 
     // Enable RTCAlarm event
-    exti_emr.modify(|_r, w| w.mr17().set_bit());
+    exti.emr.modify(|_r, w| w.mr17().set_bit());
     // Maybe set rising or falling edge as well
+    exti.rtsr.modify(|_r, w| w.tr17().set_bit());
 
     // Call asm::wfi() or asm::wfe()
     asm::wfe();
 }
-
-
 
 // define the hard fault handler
 exception!(HardFault, hard_fault);
