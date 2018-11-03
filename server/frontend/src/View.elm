@@ -50,9 +50,10 @@ singleValueDisplay values =
                <| List.map
                    (\(name, values) ->
                        let
-                           {symbol, unitName} = readingProperties name
+                           {symbol, unitName, rounding} = readingProperties name
 
-                           latestValue = Tuple.second
+                           latestValue = rounding
+                               <| Tuple.second
                                <| Maybe.withDefault (0, 0)
                                <| List.head
                                <| List.reverse values
@@ -155,6 +156,7 @@ type alias ReadingProperty =
     , unitName: String
     , graphHeight: Int
     , symbol: String
+    , rounding: Float -> Float
     }
 
 
@@ -187,22 +189,29 @@ readingProperties name =
             in
                 (min-padding, max+padding)
 
+        roundToFloat : Float -> Float -> Float
+        roundToFloat decimals value =
+            (toFloat <| round <| value * (10 ^ decimals)) / (10 ^ decimals)
 
-        independent minRange unitName separation symbol =
+        roundToInteger value =
+            toFloat <| round <| value
+
+        independent minRange unitName separation symbol rounding =
             { valueRangeFn = minMaxWithLimits minRange
             , preprocessor = identity
             , separation = separation
             , unitName = unitName
             , graphHeight = 250
             , symbol = symbol
+            , rounding = roundToFloat 0
             }
 
     in
         case name of
-            "humidity" -> independent 10 "%" 10 "💧"
-            "temperature" -> independent 10 "°C" 5 "🌡"
-            "wind_raw" -> independent 0.5 "wU" 0.5 "🍃"
-            "battery" -> independent 4.2 "V" 0.5 "🔋"
+            "humidity" -> independent 10 "%" 10 "💧" roundToInteger
+            "temperature" -> independent 10 "°C" 5 "🌡" (roundToFloat 1)
+            "wind_raw" -> independent 0.5 "wU" 0.5 "🍃" (roundToFloat 2)
+            "battery" -> independent 4.2 "V" 0.5 "🔋" (roundToFloat 2)
             _ ->
                 { valueRangeFn = (\_ -> (0, 100))
                 , preprocessor = (\list -> list)
@@ -210,6 +219,7 @@ readingProperties name =
                 , unitName = "-"
                 , graphHeight = 300
                 , symbol = "⯑"
+                , rounding = roundToInteger
                 }
 
 
