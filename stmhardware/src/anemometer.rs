@@ -1,4 +1,4 @@
-use hal::{timer, digital};
+use embedded_hal::{timer, digital};
 use embedded_hal_time::{RealCountDown, Second};
 
 use nb;

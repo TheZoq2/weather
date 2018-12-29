@@ -64,13 +64,11 @@ where
     Time: Copy
 {
     let mut ptr = 0;
-    let mut byte_amount = 0;
     loop {
         match read_with_timeout(rx, timer, timeout) {
             Ok(byte) => {
                 buffer[ptr] = byte;
                 ptr = (ptr+1) % buffer.len();
-                byte_amount += 1;
 
                 if let Some(val) = parser(buffer, ptr) {
                     return Ok(val);

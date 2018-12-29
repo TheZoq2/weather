@@ -1,6 +1,7 @@
 use arrayvec::ArrayString;
 use itoa;
-use error;
+
+use crate::error;
 
 use core::fmt::Write;
 

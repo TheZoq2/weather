@@ -9,8 +9,7 @@ use core::fmt::{self, Write};
 use arrayvec::{CapacityError, ArrayString};
 use itoa;
 
-
-use serial;
+use crate::serial;
 
 /**
     Maximum length of an AT response (Length of message + CRLF)
@@ -82,7 +81,7 @@ pub struct TransmissionError<R, T> {
 }
 
 impl<R, T> TransmissionError<R, T> {
-    pub fn try<RetType>(step: TransmissionStep, cause: Result<RetType, Error<R, T>>) 
+    pub fn try_step<RetType>(step: TransmissionStep, cause: Result<RetType, Error<R, T>>) 
         -> Result<RetType, Self>
     {
         cause.map_err(|e| {
@@ -191,11 +190,11 @@ where Tx: hal::serial::Write<u8>,
     {
         // Send a start connection message
         let tcp_start_result = self.start_tcp_connection(connection_type, address, port);
-        TransmissionError::try(TransmissionStep::Connect, tcp_start_result)?;
+        TransmissionError::try_step(TransmissionStep::Connect, tcp_start_result)?;
 
-        TransmissionError::try(TransmissionStep::Send, self.transmit_data(data))?;
+        TransmissionError::try_step(TransmissionStep::Send, self.transmit_data(data))?;
 
-        TransmissionError::try(TransmissionStep::Close, self.close_connection())
+        TransmissionError::try_step(TransmissionStep::Close, self.close_connection())
     }
 
     pub fn close_connection(&mut self) -> return_type!(()) {
