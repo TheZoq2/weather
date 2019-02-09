@@ -9,3 +9,4 @@ server/Cargo.lock
 server/frontend/elm-stuff
 
 build-teensyLC
+tags

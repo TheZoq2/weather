@@ -203,15 +203,14 @@ readingProperties name =
             , unitName = unitName
             , graphHeight = 250
             , symbol = symbol
-            , rounding = roundToFloat 0
+            , rounding = rounding
             }
-
     in
         case name of
             "humidity" -> independent 10 "%" 10 "💧" roundToInteger
             "temperature" -> independent 10 "°C" 5 "🌡" (roundToFloat 1)
             "wind_raw" -> independent 0.5 "wU" 0.5 "🍃" (roundToFloat 2)
-            "battery" -> independent 4.2 "V" 0.5 "🔋" (roundToFloat 2)
+            "battery" -> independent 4.2 "V" 0.5 "🔋" (roundToFloat 1)
             _ ->
                 { valueRangeFn = (\_ -> (0, 100))
                 , preprocessor = (\list -> list)
