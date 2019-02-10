@@ -40,7 +40,7 @@ cortex-m = "0.5.2"
 cortex-m-semihosting = "0.3.0"
 nb = "0.1.1"
 panic-semihosting = "0.5.1"
-dhtxx = {path = "dhtxx"}
+# dhtxx = {path = "dhtxx"}
 void = {version = "1.0.2", default-features = false}
 cortex-m-rt-macros = "0.1.5"
 
@@ -53,16 +53,12 @@ version = "0.4.7"
 features = []
 default-features = false
 
-[dependencies.stm32f103xx-hal]
-path = "../../stm32f103xx-hal"
-features = ["time_units"]
-
-[dependencies.stm32f103xx]
-version = "0.11.0"
-features = ["rt"]
+[dependencies.stm32f1xx-hal]
+path = "../stm32f1xx-hal"
+features = ["rt", "stm32f103", "time_units"]
 
 [dependencies.embedded-hal-time]
-path = "../../embed/embedded-hal-time"
+path = "../stm32f1xx-hal/embedded-hal-time"
 
 [dependencies.itoa]
 default-features = false

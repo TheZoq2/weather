@@ -5,5 +5,5 @@
 	path = models/scad_util
 	url = git@github.com:TheZoq2/Rust-scad-util.git
 [submodule "stmhardware/stm32f1xx-hal"]
-	path = stmhardware/stm32f1xx-hal
+	path = stm32f1xx-hal
 	url = git@github.com:stm32-rs/stm32f1xx-hal.git

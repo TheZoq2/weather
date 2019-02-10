@@ -24,16 +24,16 @@ use cortex_m::asm;
 use cortex_m_semihosting::hio;
 use core::fmt::Write;
 
-use stm32f103xx_hal::prelude::*;
-use stm32f103xx_hal::serial::{Serial};
-use stm32f103xx_hal::time::{Hertz, MonoTimer};
-use stm32f103xx_hal::timer::Timer;
-use stm32f103xx_hal::gpio::{Analog};
-use stm32f103xx_hal::gpio::gpioa::{self, CRL};
-use stm32f103xx_hal::gpio::gpiob;
-use stm32f103xx_hal::adc::{Adc};
-use stm32f103xx_hal::rtc::Rtc;
-use stm32f103xx::{TIM4, TIM3, ADC1};
+use stm32f1xx_hal::prelude::*;
+use stm32f1xx_hal::serial::{Serial};
+use stm32f1xx_hal::time::{Hertz, MonoTimer};
+use stm32f1xx_hal::timer::Timer;
+// use stm32f1xx_hal::gpio::{Analog};
+use stm32f1xx_hal::gpio::gpioa::{self, CRL};
+use stm32f1xx_hal::gpio::gpiob;
+// use stm32f1xx_hal::adc::{Adc};
+// use stm32f1xx_hal::rtc::Rtc;
+use stm32f1xx_hal::stm32::{self, TIM4, TIM3, ADC1};
 use embedded_hal_time::{RealCountDown, Microsecond, Second, Millisecond};
 use embedded_hal::adc::OneShot;
 
@@ -65,9 +65,8 @@ const ADC_RESOLUTION: u16 = 4096;
 macro_rules! handle_result {
     ($result:expr, $storage:ident, $esp:ident) => {
         if let Err(e) = $result {
-            // let wrapped = e.into();
+            let wrapped = e.into();
 
-            /*
             let _hio_result = hio::hstdout().map(|mut hio| {
                 writeln!(
                     hio,
@@ -75,9 +74,7 @@ macro_rules! handle_result {
                     wrapped
                 )
             });
-            */
 
-            /*
             match send_loop_error(&mut $esp, &wrapped) {
                 Ok(()) => {},
                 Err(send_err) => {
@@ -97,7 +94,6 @@ macro_rules! handle_result {
                     }
                 }
             };
-    */
         }
     }
 }
@@ -107,14 +103,14 @@ fn main() -> ! {
     let mut last_error: Option<error::ReadLoopError> = None;
 
     // These errors are unrecoverable so we do not save any errors here
-    let p = stm32f103xx::Peripherals::take().unwrap();
-    let cp = stm32f103xx::CorePeripherals::take().unwrap();
+    let p = stm32::Peripherals::take().unwrap();
+    let cp = stm32::CorePeripherals::take().unwrap();
 
     let mut rcc_device = p.RCC;
 
     let mut pwr = p.PWR;
     let mut flash = p.FLASH.constrain();
-    let bd_token = rcc_device.enable_backup_domain(&mut pwr);
+    // let bd_token = rcc_device.enable_backup_domain(&mut pwr);
     let mut rcc = rcc_device.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
@@ -145,27 +141,34 @@ fn main() -> ! {
     // Power the device down because we don't need it right now
     esp8266.power_down();
 
+    asm::bkpt();
+
+
 
     let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
 
 
+    // TODO: Re-enable anemometer
     // let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
     // // TODO: Use internal pull up instead
     // let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
     // let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
 
-    let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
-    let mut dhtxx = dhtxx::Dhtxx::new();
+    // TODO: Re-enable dht
+    // let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
+    // let mut dhtxx = dhtxx::Dhtxx::new();
 
     let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
 
-    let mut battery_sens_pin = gpioa.pa1.into_analog_input(&mut gpioa.crl);
+    // TODO: Re-enable battery sens when ADC is implemented
+    // let mut battery_sens_pin = gpioa.pa1.into_analog_input(&mut gpioa.crl);
     // let mut adc = Adc::adc1(p.ADC1, &mut rcc.apb2);
 
 
-    let mut rtc = Rtc::rtc(p.RTC, &bd_token);
-    nvic.enable(stm32f103xx::Interrupt::RTCALARM);
+    // TODO: Re-enable rtc
+    // let mut rtc = Rtc::rtc(p.RTC, &bd_token);
+    nvic.enable(stm32::Interrupt::RTCALARM);
 
     loop {
         // Try to send an error message if an error occured
@@ -186,22 +189,22 @@ fn main() -> ! {
         // let battery_level = read_battery_voltage(&mut battery_sens_pin, &mut adc);
         let battery_level = 3.5;
 
-        let (returned_pin, dht_read_result) = read_dht_data(
-            &mut dhtxx,
-            dhtxx_pin,
-            &mut gpioa.crl,
-            &mut misc_timer,
-            &mut dhtxx_debug_pin
-        );
-        dhtxx_pin = returned_pin;
+        // let (returned_pin, dht_read_result) = read_dht_data(
+        //     &mut dhtxx,
+        //     dhtxx_pin,
+        //     &mut gpioa.crl,
+        //     &mut misc_timer,
+        //     &mut dhtxx_debug_pin
+        // );
+        // dhtxx_pin = returned_pin;
 
         handle_result!(esp8266.power_up(), last_error, esp8266);
 
-        let dht_result = dht_read_result.map(|reading| {
-            let send_result = send_dht_data(&mut esp8266, reading);
-            handle_result!(send_result, last_error, esp8266);
-        });
-        handle_result!(dht_result, last_error, esp8266);
+        // let dht_result = dht_read_result.map(|reading| {
+        //     let send_result = send_dht_data(&mut esp8266, reading);
+        //     handle_result!(send_result, last_error, esp8266);
+        // });
+        // handle_result!(dht_result, last_error, esp8266);
         handle_result!(send_battery_voltage(&mut esp8266, battery_level), last_error, esp8266);
 
         // handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
@@ -223,7 +226,7 @@ fn main() -> ! {
 
         // asm::bkpt();
         for _i in 0..SLEEP_ITERATIONS {
-            stop_mode(&mut exti, &mut scb, &mut pwr, &mut rtc, WAKEUP_INTERVAL.0);
+            // stop_mode(&mut exti, &mut scb, &mut pwr, &mut rtc, WAKEUP_INTERVAL.0);
         }
     }
 }
@@ -260,6 +263,7 @@ fn read_and_send_wind_speed(
     Ok(send_data(esp8266, &encoding_buffer)?)
 }
 
+/*
 fn read_dht_data(
     dht: &mut types::DhtType,
     pin: dhtxx::OutPin,
@@ -293,14 +297,17 @@ fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Resul
 
     Ok(())
 }
+*/
 
 
 
+/*
 fn read_battery_voltage(battery_sensor: &mut gpioa::PA1<Analog>, adc: &mut Adc<ADC1>) -> f32 {
     // NOTE: Unwrap of void, should be safe
     let reading = block!(adc.read(battery_sensor)).unwrap();
     ((reading as f32 / (ADC_RESOLUTION as f32) / (2.6 / 3.3) * 4.12) + 0.10)
 }
+*/
 
 fn send_battery_voltage(esp: &mut types::EspType, voltage: f32) -> Result<(), error::BatteryReadError> {
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
@@ -311,6 +318,7 @@ fn send_battery_voltage(esp: &mut types::EspType, voltage: f32) -> Result<(), er
 
 
 
+/*
 /**
   Puts the CPU into stop mode. Before this is done, wakeup has to
   be configured. See page 75 of datasheet for info
@@ -319,7 +327,6 @@ fn send_battery_voltage(esp: &mut types::EspType, voltage: f32) -> Result<(), er
 
   To exit stop mode
 */
-/*
 fn stop_mode(
     exti: &mut stm32f103xx::EXTI,
     system_control_block: &mut cortex_m::peripheral::SCB,
@@ -361,7 +368,7 @@ fn deep_sleep(
 
     asm::wfe();
 }
-*/
+
 fn stop_mode(
     exti: &mut stm32f103xx::EXTI,
     system_control_block: &mut cortex_m::peripheral::SCB,
@@ -395,4 +402,4 @@ fn stop_mode(
     // Call asm::wfi() or asm::wfe()
     asm::wfe();
 }
-
+*/
