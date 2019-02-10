@@ -32,7 +32,7 @@ use stm32f1xx_hal::timer::Timer;
 use stm32f1xx_hal::gpio::gpioa::{self, CRL};
 use stm32f1xx_hal::gpio::gpiob;
 // use stm32f1xx_hal::adc::{Adc};
-// use stm32f1xx_hal::rtc::Rtc;
+use stm32f1xx_hal::rtc::Rtc;
 use stm32f1xx_hal::stm32::{self, TIM4, TIM3, ADC1};
 use embedded_hal_time::{RealCountDown, Microsecond, Second, Millisecond};
 use embedded_hal::adc::OneShot;
@@ -109,15 +109,15 @@ fn main() -> ! {
     let mut rcc_device = p.RCC;
 
     let mut pwr = p.PWR;
+    let mut scb = cp.SCB;
+    let mut exti = p.EXTI;
     let mut flash = p.FLASH.constrain();
-    // let bd_token = rcc_device.enable_backup_domain(&mut pwr);
+    let bd_token = rcc_device.enable_backup_domain(&mut pwr);
     let mut rcc = rcc_device.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
-    let mut scb = cp.SCB;
     let mut nvic = cp.NVIC;
 
-    let mut exti = p.EXTI;
 
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
@@ -136,16 +136,14 @@ fn main() -> ! {
         &mut rcc.apb2,
     );
     let (tx, rx) = serial.split();
+
+
     let mut esp8266 = esp8266::Esp8266::new(tx, rx, esp_timer, esp_reset)
         .expect("Failed to initialise esp8266");
     // Power the device down because we don't need it right now
     esp8266.power_down();
 
-    asm::bkpt();
-
-
-
-    let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
+    // let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
 
 
     // TODO: Re-enable anemometer
@@ -158,7 +156,7 @@ fn main() -> ! {
     // let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
     // let mut dhtxx = dhtxx::Dhtxx::new();
 
-    let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
+    // let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
 
     // TODO: Re-enable battery sens when ADC is implemented
@@ -167,7 +165,7 @@ fn main() -> ! {
 
 
     // TODO: Re-enable rtc
-    // let mut rtc = Rtc::rtc(p.RTC, &bd_token);
+    let mut rtc = Rtc::rtc(p.RTC, &bd_token);
     nvic.enable(stm32::Interrupt::RTCALARM);
 
     loop {
@@ -224,9 +222,9 @@ fn main() -> ! {
         }
         */
 
-        // asm::bkpt();
         for _i in 0..SLEEP_ITERATIONS {
-            // stop_mode(&mut exti, &mut scb, &mut pwr, &mut rtc, WAKEUP_INTERVAL.0);
+            stop_mode(&mut exti, &mut scb, &mut pwr, &mut rtc, WAKEUP_INTERVAL.0);
+            // stop_mode(&mut exti, &mut scb, &mut pwr, WAKEUP_INTERVAL.0);
         }
     }
 }
@@ -369,10 +367,11 @@ fn deep_sleep(
     asm::wfe();
 }
 
+*/
 fn stop_mode(
-    exti: &mut stm32f103xx::EXTI,
+    exti: &mut stm32::EXTI,
     system_control_block: &mut cortex_m::peripheral::SCB,
-    pwr: &mut stm32f103xx::PWR,
+    pwr: &mut stm32::PWR,
     rtc: &mut Rtc,
     time_seconds: u32
 ) {
@@ -402,4 +401,3 @@ fn stop_mode(
     // Call asm::wfi() or asm::wfe()
     asm::wfe();
 }
-*/
