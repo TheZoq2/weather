@@ -171,12 +171,6 @@ where Tx: hal::serial::Write<u8>,
 
         result.reset()?;
 
-        // Turn off echo on the device and wait for it to process that command
-        result.send_at_command("E0")?;
-
-        // Make sure we got an OK from the esp
-        result.wait_for_ok(DEFAULT_TIMEOUT.into())?;
-
         Ok(result)
     }
 
@@ -230,7 +224,7 @@ where Tx: hal::serial::Write<u8>,
         let mut error_count = 0;
         loop {
             match self.wait_for_got_ip(STARTUP_TIMEOUT.into()) {
-                Ok(()) => return Ok(()),
+                Ok(()) => break,
                 e @ Err(Error::RxError(serial::Error::TimedOut)) => return e,
                 e => {
                     if error_count < 255 {
@@ -243,6 +237,12 @@ where Tx: hal::serial::Write<u8>,
                 }
             }
         }
+
+        // Turn off echo on the device and wait for it to process that command
+        self.send_at_command("E0")?;
+        self.wait_for_ok(DEFAULT_TIMEOUT.into())?;
+
+        Ok(())
     }
 
     pub fn pull_some_current(&mut self) {
