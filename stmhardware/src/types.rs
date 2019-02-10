@@ -8,7 +8,7 @@ use void::Void;
 use crate::anemometer;
 use crate::esp8266;
 use crate::serial;
-// use dhtxx;
+use crate::dhtxx;
 
 
 pub type AnemometerType = anemometer::Anemometer<PA1<Input<Floating>>, Timer<TIM3>>;
@@ -20,4 +20,4 @@ pub type EspRxType = Rx<USART1>;
 pub type EspTxType = Tx<USART1>;
 pub type EspType = esp8266::Esp8266<EspTxType, EspRxType, Timer<TIM2>, PA8<Output<PushPull>>>;
 
-// pub type DhtType = dhtxx::Dhtxx;
+pub type DhtType = dhtxx::Dhtxx;

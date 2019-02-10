@@ -1,6 +1,6 @@
 use crate::types;
 use crate::esp8266;
-// use dhtxx;
+use crate::dhtxx;
 
 macro_rules! ctx_error {
     ($name:ident {$($cause_name:ident($cause:path)),*}) => {
@@ -32,8 +32,8 @@ ctx_error!(AnemometerError {
 
 ctx_error!(DhtError {
     EspTransmission(EspTransmissionError),
-    Encoding(EncodingError)
-    // Dht(dhtxx::Error)
+    Encoding(EncodingError),
+    Dht(dhtxx::Error)
 });
 
 

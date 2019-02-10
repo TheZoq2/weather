@@ -44,6 +44,7 @@ mod communication;
 mod api;
 mod types;
 mod error;
+mod dhtxx;
 
 type ErrorString = arrayvec::ArrayString<[u8; 128]>;
 
@@ -143,7 +144,7 @@ fn main() -> ! {
     // Power the device down because we don't need it right now
     esp8266.power_down();
 
-    // let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
+    let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
 
 
     // TODO: Re-enable anemometer
@@ -152,11 +153,10 @@ fn main() -> ! {
     // let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
     // let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
 
-    // TODO: Re-enable dht
-    // let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
-    // let mut dhtxx = dhtxx::Dhtxx::new();
+    let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
+    let mut dhtxx = dhtxx::Dhtxx::new();
 
-    // let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
+    let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
 
     // TODO: Re-enable battery sens when ADC is implemented
@@ -187,22 +187,22 @@ fn main() -> ! {
         // let battery_level = read_battery_voltage(&mut battery_sens_pin, &mut adc);
         let battery_level = 3.5;
 
-        // let (returned_pin, dht_read_result) = read_dht_data(
-        //     &mut dhtxx,
-        //     dhtxx_pin,
-        //     &mut gpioa.crl,
-        //     &mut misc_timer,
-        //     &mut dhtxx_debug_pin
-        // );
-        // dhtxx_pin = returned_pin;
+        let (returned_pin, dht_read_result) = read_dht_data(
+            &mut dhtxx,
+            dhtxx_pin,
+            &mut gpioa.crl,
+            &mut misc_timer,
+            &mut dhtxx_debug_pin
+        );
+        dhtxx_pin = returned_pin;
 
         handle_result!(esp8266.power_up(), last_error, esp8266);
 
-        // let dht_result = dht_read_result.map(|reading| {
-        //     let send_result = send_dht_data(&mut esp8266, reading);
-        //     handle_result!(send_result, last_error, esp8266);
-        // });
-        // handle_result!(dht_result, last_error, esp8266);
+        let dht_result = dht_read_result.map(|reading| {
+            let send_result = send_dht_data(&mut esp8266, reading);
+            handle_result!(send_result, last_error, esp8266);
+        });
+        handle_result!(dht_result, last_error, esp8266);
         handle_result!(send_battery_voltage(&mut esp8266, battery_level), last_error, esp8266);
 
         // handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
@@ -261,7 +261,6 @@ fn read_and_send_wind_speed(
     Ok(send_data(esp8266, &encoding_buffer)?)
 }
 
-/*
 fn read_dht_data(
     dht: &mut types::DhtType,
     pin: dhtxx::OutPin,
@@ -295,7 +294,6 @@ fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Resul
 
     Ok(())
 }
-*/
 
 
 
