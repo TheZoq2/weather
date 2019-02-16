@@ -113,13 +113,13 @@ fn main() -> ! {
     let mut scb = cp.SCB;
     let mut exti = p.EXTI;
     let mut flash = p.FLASH.constrain();
-    let bd_token = rcc_device.enable_backup_domain(&mut pwr);
     let mut rcc = rcc_device.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut nvic = cp.NVIC;
 
-
+    let backup_domain = rcc.bkp.constrain(p.BKP, &mut rcc.apb1, &mut pwr);
+    let lse = rcc.lse.freeze(&backup_domain);
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
     // set up esp8266
@@ -165,7 +165,7 @@ fn main() -> ! {
 
 
     // TODO: Re-enable rtc
-    let mut rtc = Rtc::rtc(p.RTC, &bd_token);
+    let mut rtc = Rtc::rtc(p.RTC, lse, &backup_domain);
     nvic.enable(stm32::Interrupt::RTCALARM);
 
     loop {
@@ -373,7 +373,9 @@ fn stop_mode(
     rtc: &mut Rtc,
     time_seconds: u32
 ) {
+    rtc.set_cnt(0);
     rtc.set_alarm(time_seconds);
+    rtc.listen_alarm();
     // rtc.clear_alarm_flag();
 
     // Set SLEEPDEEP in cortex-m3 system control register
