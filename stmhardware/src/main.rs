@@ -115,6 +115,7 @@ fn main() -> ! {
     let mut flash = p.FLASH.constrain();
     let mut rcc = rcc_device.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
+    let mut gpioc = p.GPIOC.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut nvic = cp.NVIC;
 
@@ -373,10 +374,10 @@ fn stop_mode(
     rtc: &mut Rtc,
     time_seconds: u32
 ) {
-    rtc.set_cnt(0);
+    rtc.set_seconds(0);
     rtc.set_alarm(time_seconds);
     rtc.listen_alarm();
-    // rtc.clear_alarm_flag();
+    rtc.clear_alarm_flag();
 
     // Set SLEEPDEEP in cortex-m3 system control register
     system_control_block.set_sleepdeep();
@@ -400,4 +401,5 @@ fn stop_mode(
 
     // Call asm::wfi() or asm::wfe()
     asm::wfe();
+    asm::nop();
 }
