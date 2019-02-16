@@ -3,8 +3,6 @@
 #![no_std]
 #![allow(dead_code)]
 #![allow(unused_imports)]
-#![feature(start)]
-#![feature(never_type)]
 
 extern crate panic_semihosting;
 
@@ -28,10 +26,10 @@ use stm32f1xx_hal::prelude::*;
 use stm32f1xx_hal::serial::{Serial};
 use stm32f1xx_hal::time::{Hertz, MonoTimer};
 use stm32f1xx_hal::timer::Timer;
-// use stm32f1xx_hal::gpio::{Analog};
 use stm32f1xx_hal::gpio::gpioa::{self, CRL};
 use stm32f1xx_hal::gpio::gpiob;
-// use stm32f1xx_hal::adc::{Adc};
+use stm32f1xx_hal::gpio::Analog;
+use stm32f1xx_hal::adc::{Adc};
 use stm32f1xx_hal::rtc::Rtc;
 use stm32f1xx_hal::stm32::{self, TIM4, TIM3, ADC1};
 use embedded_hal_time::{RealCountDown, Microsecond, Second, Millisecond};
@@ -115,7 +113,6 @@ fn main() -> ! {
     let mut flash = p.FLASH.constrain();
     let mut rcc = rcc_device.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
-    let mut gpioc = p.GPIOC.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut nvic = cp.NVIC;
 
@@ -161,12 +158,13 @@ fn main() -> ! {
 
 
     // TODO: Re-enable battery sens when ADC is implemented
-    // let mut battery_sens_pin = gpioa.pa1.into_analog_input(&mut gpioa.crl);
-    // let mut adc = Adc::adc1(p.ADC1, &mut rcc.apb2);
+    let mut battery_sens_pin = gpioa.pa1.into_analog(&mut gpioa.crl);
+    let mut adc = Adc::adc1(p.ADC1, &mut rcc.apb2);
 
 
     // TODO: Re-enable rtc
     let mut rtc = Rtc::rtc(p.RTC, lse, &backup_domain);
+    rtc.listen_alarm();
     nvic.enable(stm32::Interrupt::RTCALARM);
 
     loop {
@@ -185,8 +183,8 @@ fn main() -> ! {
             last_error = None;
         }
 
-        // let battery_level = read_battery_voltage(&mut battery_sens_pin, &mut adc);
-        let battery_level = 3.5;
+        let battery_level = read_battery_voltage(&mut battery_sens_pin, &mut adc);
+        // let battery_level = 3.5;
 
         let (returned_pin, dht_read_result) = read_dht_data(
             &mut dhtxx,
@@ -208,25 +206,23 @@ fn main() -> ! {
 
         // handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
 
-
+        let disabled_adc = adc.power_down();
         esp8266.power_down();
 
         // If the voltage is below a certain threshold, we should permanently
         // go into sleep mode in order to avoid damaging it.
-        /*if battery_level < 3.5 {
-            rtc.disable_alarm();
-            // deep_sleep(&mut scb, &mut pwr);
-            asm::bkpt();
-        }
-        else {
+        if battery_level < 3.7 {
+            rtc.unlisten_alarm();
+            nvic.disable(stm32::Interrupt::RTCALARM);
+            // TODO: Try to find out why it wakes up from wfe and hard faults
+            // without this
+            deep_sleep(&mut scb, &mut pwr);
             // asm::bkpt();
         }
-        */
 
-        for _i in 0..SLEEP_ITERATIONS {
-            stop_mode(&mut exti, &mut scb, &mut pwr, &mut rtc, WAKEUP_INTERVAL.0);
-            // stop_mode(&mut exti, &mut scb, &mut pwr, WAKEUP_INTERVAL.0);
-        }
+        stop_mode(&mut exti, &mut scb, &mut pwr, &mut rtc, WAKEUP_INTERVAL.0);
+
+        adc = disabled_adc.power_up();
     }
 }
 
@@ -298,13 +294,11 @@ fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Resul
 
 
 
-/*
 fn read_battery_voltage(battery_sensor: &mut gpioa::PA1<Analog>, adc: &mut Adc<ADC1>) -> f32 {
     // NOTE: Unwrap of void, should be safe
     let reading = block!(adc.read(battery_sensor)).unwrap();
     ((reading as f32 / (ADC_RESOLUTION as f32) / (2.6 / 3.3) * 4.12) + 0.10)
 }
-*/
 
 fn send_battery_voltage(esp: &mut types::EspType, voltage: f32) -> Result<(), error::BatteryReadError> {
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
@@ -346,10 +340,11 @@ fn stop_mode(
     // Call asm::wfi() or asm::wfe()
     deep_sleep(system_control_block, pwr);
 }
+*/
 
 fn deep_sleep(
     system_control_block: &mut cortex_m::peripheral::SCB,
-    pwr: &mut stm32f103xx::PWR,
+    pwr: &mut stm32::PWR,
 ) {
     // Set SLEEPDEEP in cortex-m3 system control register
     system_control_block.set_sleepdeep();
@@ -366,7 +361,6 @@ fn deep_sleep(
     asm::wfe();
 }
 
-*/
 fn stop_mode(
     exti: &mut stm32::EXTI,
     system_control_block: &mut cortex_m::peripheral::SCB,
@@ -376,7 +370,6 @@ fn stop_mode(
 ) {
     rtc.set_seconds(0);
     rtc.set_alarm(time_seconds);
-    rtc.listen_alarm();
     rtc.clear_alarm_flag();
 
     // Set SLEEPDEEP in cortex-m3 system control register
@@ -400,6 +393,8 @@ fn stop_mode(
     exti.pr.modify(|_r, w| w.pr17().set_bit());
 
     // Call asm::wfi() or asm::wfe()
+    asm::bkpt();
     asm::wfe();
     asm::nop();
+    asm::bkpt();
 }

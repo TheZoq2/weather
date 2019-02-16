@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Support for real time clock (RTC)
+
 ## [v0.2.4] - 2018-01-26
 
 ### Changed
