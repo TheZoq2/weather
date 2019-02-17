@@ -393,8 +393,8 @@ fn stop_mode(
     exti.pr.modify(|_r, w| w.pr17().set_bit());
 
     // Call asm::wfi() or asm::wfe()
-    asm::bkpt();
+    // asm::bkpt();
     asm::wfe();
     asm::nop();
-    asm::bkpt();
+    // asm::bkpt();
 }
