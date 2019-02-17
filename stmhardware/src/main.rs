@@ -66,13 +66,13 @@ macro_rules! handle_result {
         if let Err(e) = $result {
             let wrapped = e.into();
 
-            let _hio_result = hio::hstdout().map(|mut hio| {
-                writeln!(
-                    hio,
-                    "ReadLoopError: {:?}",
-                    wrapped
-                )
-            });
+            // let _hio_result = hio::hstdout().map(|mut hio| {
+            //     writeln!(
+            //         hio,
+            //         "ReadLoopError: {:?}",
+            //         wrapped
+            //     )
+            // });
 
             match send_loop_error(&mut $esp, &wrapped) {
                 Ok(()) => {},
@@ -113,6 +113,7 @@ fn main() -> ! {
     let mut flash = p.FLASH.constrain();
     let mut rcc = rcc_device.constrain();
     let mut gpioa = p.GPIOA.split(&mut rcc.apb2);
+    let mut gpiob = p.GPIOB.split(&mut rcc.apb2);
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut nvic = cp.NVIC;
 
@@ -145,11 +146,10 @@ fn main() -> ! {
     let mut dhtxx_debug_pin = gpioa.pa2.into_push_pull_output(&mut gpioa.crl);
 
 
-    // TODO: Re-enable anemometer
-    // let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
+    let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
     // // TODO: Use internal pull up instead
-    // let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
-    // let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
+    let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
+    let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
 
     let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
     let mut dhtxx = dhtxx::Dhtxx::new();
@@ -157,12 +157,10 @@ fn main() -> ! {
     let mut misc_timer = Timer::tim4(p.TIM4, Hertz(1), clocks, &mut rcc.apb1);
 
 
-    // TODO: Re-enable battery sens when ADC is implemented
-    let mut battery_sens_pin = gpioa.pa1.into_analog(&mut gpioa.crl);
+    let mut battery_sens_pin = gpiob.pb1.into_analog(&mut gpiob.crl);
     let mut adc = Adc::adc1(p.ADC1, &mut rcc.apb2);
 
 
-    // TODO: Re-enable rtc
     let mut rtc = Rtc::rtc(p.RTC, lse, &backup_domain);
     rtc.listen_alarm();
     nvic.enable(stm32::Interrupt::RTCALARM);
@@ -204,18 +202,18 @@ fn main() -> ! {
         handle_result!(dht_result, last_error, esp8266);
         handle_result!(send_battery_voltage(&mut esp8266, battery_level), last_error, esp8266);
 
-        // handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
+        // TODO: Read wind speed while esp is powered off
+        handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
 
         let disabled_adc = adc.power_down();
         esp8266.power_down();
 
         // If the voltage is below a certain threshold, we should permanently
         // go into sleep mode in order to avoid damaging it.
-        if battery_level < 3.7 {
+        if battery_level < 3.6 {
             rtc.unlisten_alarm();
-            nvic.disable(stm32::Interrupt::RTCALARM);
-            // TODO: Try to find out why it wakes up from wfe and hard faults
-            // without this
+            rtc.clear_alarm_flag();
+            // nvic.disable(stm32::Interrupt::RTCALARM);
             deep_sleep(&mut scb, &mut pwr);
             // asm::bkpt();
         }
@@ -294,7 +292,7 @@ fn send_dht_data(esp8266: &mut types::EspType, reading: dhtxx::Reading) -> Resul
 
 
 
-fn read_battery_voltage(battery_sensor: &mut gpioa::PA1<Analog>, adc: &mut Adc<ADC1>) -> f32 {
+fn read_battery_voltage(battery_sensor: &mut gpiob::PB1<Analog>, adc: &mut Adc<ADC1>) -> f32 {
     // NOTE: Unwrap of void, should be safe
     let reading = block!(adc.read(battery_sensor)).unwrap();
     ((reading as f32 / (ADC_RESOLUTION as f32) / (2.6 / 3.3) * 4.12) + 0.10)
