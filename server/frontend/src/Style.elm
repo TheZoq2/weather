@@ -74,8 +74,7 @@ singleValue : String -> Float -> String -> Html msg
 singleValue symbol value unit =
     let
         divStyle =
-            [ width (px 650)
-            , displayFlex
+            [ displayFlex
             ]
 
         spanStyle =
@@ -100,7 +99,6 @@ singleValue symbol value unit =
             , marginTop (px 7)
             , color (hex "909090")
             ]
-
     in
         styled div divStyle []
             [ styled span symbolStyle [] [text symbol]
