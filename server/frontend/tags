@@ -1,6 +1,66 @@
 !_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
 !_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
-!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
-!_TAG_PROGRAM_NAME	Exuberant Ctags	//
-!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
-!_TAG_PROGRAM_VERSION	5.8	//
+!_TAG_OUTPUT_MODE	u-ctags	/u-ctags or e-ctags/
+!_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
+!_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
+!_TAG_PROGRAM_URL	https://ctags.io/	/official site/
+!_TAG_PROGRAM_VERSION	0.0.0	/45968eff/
+AvailableDataReceived (Result Http.Error (List String))	src/Msg.elm	/^    | AvailableDataReceived (Result Http.Error (List String))$/;"	c	type:Msg
+Constants	src/Constants.elm	/^module Constants exposing (day, week)$/;"	m
+Decode	src/Requests.elm	/^import Json.Decode as Decode$/;"	n
+GraphParams	src/View.elm	/^type alias GraphParams =$/;"	a
+Main	src/Main.elm	/^module Main exposing (..) $/;"	m
+Model	src/Model.elm	/^module Model exposing (Model)$/;"	m
+Model	src/Model.elm	/^type alias Model =$/;"	a
+Msg	src/Msg.elm	/^module Msg exposing (Msg(..))$/;"	m
+Msg	src/Msg.elm	/^type Msg$/;"	t
+ReadingProperty	src/View.elm	/^type alias ReadingProperty =$/;"	a
+Requests	src/Requests.elm	/^module Requests exposing (..)$/;"	m
+Style	src/Style.elm	/^module Style exposing (..)$/;"	m
+Svg	src/View.elm	/^import Svg.Styled as Svg exposing (svg)$/;"	n
+SvgAttributes	src/View.elm	/^import Svg.Styled.Attributes as SvgAttributes exposing (viewBox)$/;"	n
+Tick Time	src/Msg.elm	/^    | Tick Time$/;"	c	type:Msg
+TimeRangeChanged Time	src/Msg.elm	/^    | TimeRangeChanged Time$/;"	c	type:Msg
+ToggleData String	src/Msg.elm	/^    | ToggleData String$/;"	c	type:Msg
+UrlChanged Navigation.Location	src/Msg.elm	/^    | UrlChanged Navigation.Location$/;"	c	type:Msg
+ValueDisplay	src/ValueDisplay.elm	/^module ValueDisplay exposing (valueBox)$/;"	m
+ValuesReceived String (Result Http.Error (List (Time, Float)))	src/Msg.elm	/^    = ValuesReceived String (Result Http.Error (List (Time, Float)))$/;"	c	type:Msg
+View	src/View.elm	/^module View exposing (view)$/;"	m
+contentContainer	src/Style.elm	/^contentContainer =$/;"	f
+dataSelector	src/View.elm	/^dataSelector availableData =$/;"	f
+day	src/Constants.elm	/^day =$/;"	f
+decodeTemperatures	src/Requests.elm	/^decodeTemperatures =$/;"	f
+divStyle	src/Style.elm	/^        divStyle =$/;"	f	function:singleValue
+drawGraph	src/View.elm	/^drawGraph {viewWidth, viewHeight, valueRange, horizontalStep, unit} startEndTime values =$/;"	f
+drawValueBox	src/ValueDisplay.elm	/^drawValueBox icon data =$/;"	f
+drawValues	src/View.elm	/^drawValues timeRange values =$/;"	f
+getAvailableData	src/Requests.elm	/^getAvailableData url =$/;"	f
+getValues	src/Requests.elm	/^getValues url name =$/;"	f
+graphParamFn	src/View.elm	/^        graphParamFn readingProperty values =$/;"	f	function:drawValues
+independent	src/View.elm	/^        independent minRange unitName separation symbol rounding =$/;"	f	function:readingProperties
+init	src/Main.elm	/^init location =$/;"	f
+lastNValues	src/View.elm	/^        lastNValues n list =$/;"	f	function:readingProperties
+main	src/Main.elm	/^main =$/;"	f
+minMaxWithLimits	src/View.elm	/^        minMaxWithLimits minRange values =$/;"	f	function:readingProperties
+readingProperties	src/View.elm	/^readingProperties name =$/;"	f
+roundToFloat	src/View.elm	/^        roundToFloat decimals value =$/;"	f	function:readingProperties
+roundToInteger	src/View.elm	/^        roundToInteger value =$/;"	f	function:readingProperties
+sendAvailableDataQuery	src/Requests.elm	/^sendAvailableDataQuery url =$/;"	f
+sendValueRequest	src/Requests.elm	/^sendValueRequest url name =$/;"	f
+serverUrlFromLocation	src/Main.elm	/^serverUrlFromLocation location =$/;"	f
+singleValue	src/Style.elm	/^singleValue symbol value unit =$/;"	f
+singleValueContainer	src/Style.elm	/^singleValueContainer =$/;"	f
+singleValueDisplay	src/View.elm	/^singleValueDisplay values =$/;"	f
+spanStyle	src/Style.elm	/^        spanStyle =$/;"	f	function:singleValue
+stepPreprocessor	src/View.elm	/^stepPreprocessor original =$/;"	f
+styledButton	src/Style.elm	/^styledButton =$/;"	f
+subscriptions	src/Main.elm	/^subscriptions model =$/;"	f
+symbolStyle	src/Style.elm	/^        symbolStyle =$/;"	f	function:singleValue
+timeSelectionButtons	src/View.elm	/^timeSelectionButtons =$/;"	f
+unitStyle	src/Style.elm	/^        unitStyle =$/;"	f	function:singleValue
+update	src/Main.elm	/^update msg model =$/;"	f
+valueContainer	src/Style.elm	/^valueContainer =$/;"	f
+valueContainerItem	src/Style.elm	/^valueContainerItem name =$/;"	f
+valueStyle	src/Style.elm	/^        valueStyle =$/;"	f	function:singleValue
+view	src/View.elm	/^view model =$/;"	f
+week	src/Constants.elm	/^week =$/;"	f

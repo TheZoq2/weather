@@ -47,15 +47,15 @@ mod dhtxx;
 type ErrorString = arrayvec::ArrayString<[u8; 128]>;
 
 // const IP_ADDRESS: &str = "46.59.41.53";
-const IP_ADDRESS: &str = "192.168.0.11";
+const IP_ADDRESS: &str = "192.168.0.12";
 // const IP_ADDRESS: &str = "192.168.0.12";
 const PORT: u16 = 2000;
 // const READ_INTERVAL: Second = Second(60*5);
 // const READ_INTERVAL: Second = Second(30);
 // Sleep for 5 minutes between reads, but wake up once every 10 seconds seconds
 // to keep power banks from shutting down the psu
-// const WAKEUP_INTERVAL: Second = Second(60*5);
-const WAKEUP_INTERVAL: Second = Second(10);
+const WAKEUP_INTERVAL: Second = Second(60*5);
+// const WAKEUP_INTERVAL: Second = Second(10);
 // const SLEEP_ITERATIONS: u8 = 6;
 const SLEEP_ITERATIONS: u8 = 1;
 const ADC_RESOLUTION: u16 = 4096;
@@ -117,6 +117,7 @@ fn main() -> ! {
     let mut afio = p.AFIO.constrain(&mut rcc.apb2);
     let mut nvic = cp.NVIC;
 
+
     let backup_domain = rcc.bkp.constrain(p.BKP, &mut rcc.apb1, &mut pwr);
     let lse = rcc.lse.freeze(&backup_domain);
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
@@ -137,7 +138,6 @@ fn main() -> ! {
     );
     let (tx, rx) = serial.split();
 
-
     let mut esp8266 = esp8266::Esp8266::new(tx, rx, esp_timer, esp_reset)
         .expect("Failed to initialise esp8266");
     // Power the device down because we don't need it right now
@@ -149,7 +149,7 @@ fn main() -> ! {
     let ane_timer = Timer::tim3(p.TIM3, Hertz(1), clocks, &mut rcc.apb1);
     // // TODO: Use internal pull up instead
     let ane_pin = gpioa.pa1.into_floating_input(&mut gpioa.crl);
-    let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(15), 3);
+    let mut anemometer = anemometer::Anemometer::new(ane_pin, ane_timer, Second(10), 3);
 
     let mut dhtxx_pin = gpioa.pa0.into_push_pull_output(&mut gpioa.crl);
     let mut dhtxx = dhtxx::Dhtxx::new();
@@ -193,6 +193,8 @@ fn main() -> ! {
         );
         dhtxx_pin = returned_pin;
 
+        let wind_speed = anemometer.measure();
+
         handle_result!(esp8266.power_up(), last_error, esp8266);
 
         let dht_result = dht_read_result.map(|reading| {
@@ -203,7 +205,7 @@ fn main() -> ! {
         handle_result!(send_battery_voltage(&mut esp8266, battery_level), last_error, esp8266);
 
         // TODO: Read wind speed while esp is powered off
-        handle_result!(read_and_send_wind_speed(&mut esp8266, &mut anemometer), last_error, esp8266);
+        handle_result!(send_wind_speed(&mut esp8266, wind_speed), last_error, esp8266);
 
         let disabled_adc = adc.power_down();
         esp8266.power_down();
@@ -243,12 +245,14 @@ fn send_data(esp: &mut types::EspType, data: &str) -> Result<(), error::EspTrans
     )
 }
 
+fn read_wind_speed(anemometer: &mut types::AnemometerType) -> f32 {
+    anemometer.measure()
+}
 
-fn read_and_send_wind_speed(
+fn send_wind_speed(
     esp8266: &mut types::EspType,
-    anemometer: &mut types::AnemometerType
+    result: f32
 ) -> Result<(), error::AnemometerError>{
-    let result = anemometer.measure();
 
     let mut encoding_buffer = arrayvec::ArrayString::<[_;32]>::new();
     communication::encode_f32("wind_raw", result, &mut encoding_buffer)?;
