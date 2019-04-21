@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["TheZoq2 <frans.skarman@gmail.com>"]
 
 [dependencies]
-simple-server = {git = "https://github.com/steveklabnik/simple-server"}
+simple-server = "0.4.0"
 serde = "1.0.25"
 http = "0.1.1"
 
