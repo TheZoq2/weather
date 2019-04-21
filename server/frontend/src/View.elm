@@ -29,13 +29,17 @@ import Style exposing
 
 view : Model -> Html.Html Msg
 view model =
+    let
+        controls = valueContainerItem "controls" []
+            [ dataSelector model.availableData
+            , timeSelectionButtons
+            ]
+    in
     toUnstyled <| contentContainer
         []
-        (  [ dataSelector model.availableData
-           , timeSelectionButtons
-           , valueContainer
+        (  [ valueContainer
                 []
-                <| [singleValueDisplay model.values]
+                <| [controls, singleValueDisplay model.values]
                    ++ (drawValues model.timeRange model.values)
            ]
         )
@@ -210,7 +214,7 @@ readingProperties name =
             "humidity" -> independent 10 "%" 10 "💧" roundToInteger
             "temperature" -> independent 10 "°C" 5 "🌡" (roundToFloat 1)
             "wind_raw" -> independent 0.5 "wU" 0.5 "🍃" (roundToFloat 2)
-            "battery" -> independent 4.2 "V" 0.5 "🔋" (roundToFloat 1)
+            "battery" -> independent 1.0 "V" 0.5 "🔋" (roundToFloat 1)
             _ ->
                 { valueRangeFn = (\_ -> (0, 100))
                 , preprocessor = (\list -> list)
