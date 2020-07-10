@@ -1,0 +1,11 @@
+[package]
+name = "basestation"
+version = "0.1.0"
+authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rppal = {path = "rppal", features = ["hal"]}
+embedded-nrf24l01 = {path = "../rtic_hardware/embedded-nrf24l01"}

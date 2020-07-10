@@ -1,0 +1,3 @@
+#!/bin/bash
+
+scp target/armv7-unknown-linux-musleabihf/debug/basestation boats.local:/home/frans/Documents/weather

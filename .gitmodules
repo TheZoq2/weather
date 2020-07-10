@@ -7,3 +7,12 @@
 [submodule "stm32f1xx-hal"]
 	path = stm32f1xx-hal
 	url = git@github.com:TheZoq2/stm32f1xx-hal.git
+[submodule "esp01-rs"]
+	path = esp01-rs
+	url = git@github.com:TheZoq2/esp01-rs.git
+[submodule "rtic_hardware/embedded-nrf24l01"]
+	path = rtic_hardware/embedded-nrf24l01
+	url = git@github.com:astro/embedded-nrf24l01.git
+[submodule "basestation/rppal"]
+	path = basestation/rppal
+	url = git@github.com:golemparts/rppal.git
