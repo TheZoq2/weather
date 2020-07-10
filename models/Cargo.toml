@@ -2,7 +2,8 @@
 name = "models"
 version = "0.1.0"
 authors = ["TheZoq2 <frans.skarman@gmail.com>"]
+edition="2018"
 
 [dependencies]
-scad_generator = {git = "https://github.com/TheZoq2/Rust-Scad.git"}
+scad = "1.2.2"
 scad_util = {path = "scad_util"}

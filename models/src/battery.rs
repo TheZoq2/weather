@@ -1,4 +1,4 @@
-use scad_generator::*;
+use scad::*;
 use scad_util::constants::{x_axis, y_axis, z_axis};
 
 qstruct!(Powerbank() {

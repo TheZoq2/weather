@@ -1,9 +1,10 @@
 mod battery;
+mod rainmeter;
 
 #[macro_use]
-extern crate scad_generator;
-extern crate scad_util;
-use scad_generator::*;
+extern crate scad;
+use scad_util;
+use scad::*;
 
 
 use scad_util::compositions::object_at_corners;
@@ -727,6 +728,7 @@ fn save_file(filename: &str, object: ScadObject) {
     sfile.write_to_file(String::from(filename));
 }
 
+
 fn main() {
     let anemometer = Anemometer::new();
     save_file("arm.scad", anemometer.arm());
@@ -742,4 +744,10 @@ fn main() {
     save_file("wallmount.scad", wall_mount());
     save_file("battery_box.scad", battery::Powerbank::new().container());
     save_file("battery_box_lid.scad", battery::Powerbank::new().lid());
+    save_file("rainmeter_tray.scad", scad!( Union; {
+            rainmeter::rainmeter_tray(),
+            //rainmeter::rainmeter_mount()
+        }
+    ));
+    save_file("rainmeter_mount.scad", rainmeter::rainmeter_mount());
 }
