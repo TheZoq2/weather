@@ -22,13 +22,15 @@ use stm32f1xx_hal::{
         Floating,
     },
     delay::Delay,
-    pac::SPI1,
+    pac::{PWR, EXTI, SPI1},
     spi::{Spi, Spi1NoRemap},
+    rtc::Rtc,
 };
 
 use embedded_nrf24l01 as nrf;
 use nrf::{StandbyMode, NRF24L01};
-use nrf::Configuration;
+
+use common::nrf::setup_nrf;
 
 // pub type EspType = Esp8266<Tx<USART1>, Rx<USART1>, LongTimer<TIM2>, PA8<Output<PushPull>>>;
 pub type NrfType = NRF24L01<
@@ -45,7 +47,13 @@ pub type NrfType = NRF24L01<
 #[app(device = stm32f1xx_hal::pac, peripherals = true)]
 const APP: () = {
     struct Resources {
-        nrf: StandbyMode<NrfType>,
+        nrf: Option<StandbyMode<NrfType>>,
+        rtc: Rtc,
+        // Required for sleep
+        exti: EXTI,
+        scb: cortex_m::peripheral::SCB,
+        pwr: PWR,
+
     }
 
     #[init]
@@ -58,6 +66,10 @@ const APP: () = {
         let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
         let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
         let mut afio = dp.AFIO.constrain(&mut rcc.apb2);
+        let mut pwr = dp.PWR;
+
+
+        let mut backup_domain = rcc.bkp.constrain(dp.BKP, &mut rcc.apb1, &mut pwr);
 
         let mut status_led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
         status_led.set_low();
@@ -85,29 +97,10 @@ const APP: () = {
         );
 
         let mut nrf = NRF24L01::new(ce, csn, spi).unwrap();
-        hprintln!("AutoAck {:?}", nrf.get_auto_ack().unwrap()).unwrap();
-        hprintln!("Register {:?}", nrf.get_address_width().unwrap()).unwrap();
-        hprintln!("Frequency {:?}", nrf.get_frequency().unwrap()).unwrap();
 
         let addr: [u8; 5] = [0x22, 0x22, 0x22, 0x22, 0x22];
 
-        nrf.set_frequency(100).unwrap();
-        nrf.set_auto_retransmit(0, 0).unwrap();
-        // nrf.set_crc(Some(CrcMode::TwoBytes)).unwrap();
-        // nrf.set_rf(DataRate::R250Kbps, 1).unwrap();
-        nrf
-            .set_auto_ack(&[true, false, false, false, false, false])
-            .unwrap();
-        nrf
-            .set_pipes_rx_enable(&[true, false, false, false, false, false])
-            .unwrap();
-        nrf
-            .set_pipes_rx_lengths(&[None, None, None, None, None, None])
-            .unwrap();
-        nrf.set_tx_addr(&addr).unwrap();
-        nrf.set_rx_addr(0, &addr).unwrap();
-        nrf.flush_rx().unwrap();
-        nrf.flush_tx().unwrap();
+        setup_nrf(&mut nrf, &addr);
 
         delay.delay_ms(10 as u16);
 
@@ -130,18 +123,97 @@ const APP: () = {
                 .expect("Failed to go back to standby mode")
         };
 
-        status_led.set_high();
+        status_led.set_high().unwrap();
 
+        let mut rtc = Rtc::rtc(dp.RTC, &mut backup_domain);
+        rtc.select_frequency(1.hz());
+        rtc.listen_alarm();
 
         init::LateResources {
-            nrf
+            nrf: Some(nrf),
+            rtc,
+            exti: dp.EXTI,
+            scb: cp.SCB,
+            pwr,
         }
     }
 
-    #[idle()]
-    fn idle(_ctx: idle::Context) -> ! {
+    #[idle(resources=[rtc, pwr, scb, exti])]
+    fn idle(ctx: idle::Context) -> ! {
+        let mut r = ctx.resources;
         loop {
-            asm::wfi()
+            r.rtc.lock(|rtc| {
+                rtc.set_time(0);
+                rtc.set_alarm(2);
+                rtc.clear_alarm_flag();
+            });
+
+            r.exti.lock(|exti| {
+                // Enable RTCAlarm event
+                exti.imr.modify(|_r, w| w.mr17().set_bit());
+                // Maybe set rising or falling edge as well
+                exti.rtsr.modify(|_r, w| w.tr17().set_bit());
+            });
+
+            let scb = &mut r.scb;
+            let pwr = &mut r.pwr;
+
+            stop_mode(scb, pwr);
+            // asm::wfi();
         }
     }
+
+    #[task(binds = RTCALARM, resources=[nrf, rtc, exti])]
+    fn on_rtc_alarm(ctx: on_rtc_alarm::Context) {
+        let r = ctx.resources;
+
+        // Clear the pending bit
+        r.exti.pr.modify(|_r, w| w.pr17().set_bit());
+
+        // TODO: Remove once runnign on HW
+        // hprintln!("T");
+
+        // clear the alarm
+        r.rtc.set_time(0);
+        r.rtc.clear_alarm_flag();
+
+        // Transmit a ping
+        // NOTE: Safe unwrap because we'll make sure to put this back
+        // NOTE: Actually unsafe, if we take the NRF out elsewhere, in an interrupt,
+        // we'll have a fun issue to debug
+        let nrf = r.nrf.take().unwrap();
+
+        let mut nrf = nrf.tx().expect("Failed to go to TX mode");
+
+        nrf.send(b"Timer")
+            .expect("Failed to send hello world");
+        let _success = block!(nrf.poll_send()).expect("Poll error");
+        // if !success {}
+
+        *r.nrf = Some(nrf.standby().expect("Failed to go back to standby mode"));
+    }
 };
+
+
+fn stop_mode(
+    system_control_block: &mut cortex_m::peripheral::SCB,
+    pwr: &mut PWR,
+) {
+    // Set SLEEPDEEP in cortex-m3 system control register
+    system_control_block.set_sleepdeep();
+
+    // // Clear PDDS bit in PWR_CR to enable stop mode
+    // // Set voltage regulator mode using LDPS in PWR_CR
+    pwr.cr.modify(|_r, w| {
+        // Enable stop mode
+        w.pdds().clear_bit()
+        // Voltage regulators to low power mode
+         .lpds().set_bit()
+    });
+
+    // Call asm::wfi() or asm::wfe()
+    // asm::bkpt();
+    asm::wfi();
+    asm::nop();
+    // asm::bkpt();
+}

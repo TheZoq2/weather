@@ -1,10 +1,12 @@
-use std::thread::sleep_ms;
+use std::thread::sleep;
+use std::time::Duration;
 
 use rppal::spi::{Spi, Bus, SlaveSelect, Mode};
 use rppal::gpio::Gpio;
 
 use embedded_nrf24l01 as nrf;
 use nrf::Configuration;
+use common::nrf::setup_nrf;
 
 fn main() {
     let spi = Spi::new(
@@ -24,35 +26,13 @@ fn main() {
 
     let addr: [u8; 5] = [0x22, 0x22, 0x22, 0x22, 0x22];
 
-    nrf.set_frequency(100).unwrap();
-    nrf.set_auto_retransmit(0, 0).unwrap();
-    // nrf.set_crc(Some(CrcMode::TwoBytes)).unwrap();
-    // nrf.set_rf(DataRate::R250Kbps, 1).unwrap();
-    nrf
-        .set_auto_ack(&[true, false, false, false, false, false])
-        .unwrap();
-    nrf
-        .set_pipes_rx_enable(&[true, false, false, false, false, false])
-        .unwrap();
-    nrf
-        .set_pipes_rx_lengths(&[None, None, None, None, None, None])
-        .unwrap();
-    nrf.set_tx_addr(&addr).unwrap();
-    nrf.set_rx_addr(0, &addr).unwrap();
-    nrf.flush_rx().unwrap();
-    nrf.flush_tx().unwrap();
-
-    sleep_ms(10);
+    setup_nrf(&mut nrf, &addr);
+    sleep(Duration::from_millis(10));
 
     let mut nrf = nrf
         .rx()
         .expect("Failed to go into RX mode");
-
-    println!("AutoAck {:?}", nrf.get_auto_ack().unwrap());
-    println!("Register {:?}", nrf.get_address_width().unwrap());
-    println!("Frequency {:?}", nrf.get_frequency().unwrap());
-
-    sleep_ms(130);
+    sleep(Duration::from_millis(130));
 
     // nrf.set_tx_addr(b"00001").expect("failed to set addres");
 
@@ -64,7 +44,7 @@ fn main() {
             println!("Content: {}", String::from_utf8_lossy(&message));
         }
         println!("{:?}", nrf.can_read());
-        sleep_ms(1000);
+        sleep(Duration::from_millis(1000));
     }
     println!("Hello, world!");
 }
