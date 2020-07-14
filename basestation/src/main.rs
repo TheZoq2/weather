@@ -38,10 +38,13 @@ fn main() {
 
 
     loop {
-        if let Some(chan) = nrf.can_read().expect("Failed to check for msgs") {
+        while let Some(chan) = nrf.can_read().expect("Failed to check for msgs") {
             println!("Got a message on channel: {}", chan);
             let message = nrf.read().expect("Failed to read");
-            println!("Content: {}", String::from_utf8_lossy(&message));
+            let decoded = postcard::from_bytes::<common::Message>(&message);
+
+            println!("Msg: {:?}", decoded);
+            // println!("Content: {}", String::from_utf8_lossy(&message));
         }
         println!("{:?}", nrf.can_read());
         sleep(Duration::from_millis(1000));

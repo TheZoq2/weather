@@ -10,3 +10,4 @@ edition = "2018"
 rppal = {path = "rppal", features = ["hal"]}
 embedded-nrf24l01 = {path = "../rtic_hardware/embedded-nrf24l01"}
 common = {path = "../common"}
+postcard = "0.5.0"

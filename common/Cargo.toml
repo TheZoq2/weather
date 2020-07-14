@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 embedded-nrf24l01 = {path = "../rtic_hardware/embedded-nrf24l01"}
 embedded-hal = "0.2.3"
+serde = {version = "1.0.114", default-features = false, features = ["derive"]}
+bmp085-driver = "0.1.4"

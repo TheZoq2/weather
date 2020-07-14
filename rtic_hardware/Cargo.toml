@@ -20,6 +20,6 @@ nb = "0.1.2"
 embedded-nrf24l01 = {path = "embedded-nrf24l01"}
 common = {path = "../common"}
 serde = {version = "1.0.114", default-features = false}
-serde-json-core = {version = "0.1.0", default-features = false}
+postcard = "0.5.0"
 heapless = "0.5.5"
 bmp085-driver = "0.1.4"

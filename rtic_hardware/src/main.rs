@@ -1,6 +1,8 @@
 #![no_main]
 #![no_std]
 
+mod latest_queue;
+
 use panic_semihosting as _;
 use rtic::app;
 use cortex_m_semihosting::hprintln;
@@ -28,7 +30,7 @@ use stm32f1xx_hal::{
     },
     delay::Delay,
     pac::{PWR, EXTI, SPI1, I2C1},
-    spi::{Spi, Spi1NoRemap},
+    spi::{self, Spi, Spi1NoRemap},
     rtc::Rtc,
     i2c::{self, BlockingI2c},
 };
@@ -40,8 +42,20 @@ use bmp085_driver as bmp;
 use bmp::Bmp085;
 
 use heapless::consts;
+use heapless::{Vec, HistoryBuffer, ArrayLength};
 
 use common::nrf::setup_nrf;
+use common::{Message, SensorReading};
+
+#[derive(Debug)]
+pub enum Error {
+    TransmitFailure,
+    BmpReadError(i2c::Error),
+    NrfModeError(nrf::Error<spi::Error>),
+    NrfTxError(nrf::Error<spi::Error>),
+    NrfPollError(nrf::Error<spi::Error>),
+    EncodingError(postcard::Error),
+}
 
 pub type NrfType = NRF24L01<
     core::convert::Infallible,
@@ -71,6 +85,7 @@ const APP: () = {
         exti: EXTI,
         scb: cortex_m::peripheral::SCB,
         pwr: PWR,
+        errors: latest_queue::LatestQueue<Error, consts::U10>,
     }
 
     #[init]
@@ -91,7 +106,7 @@ const APP: () = {
         let mut backup_domain = rcc.bkp.constrain(dp.BKP, &mut rcc.apb1, &mut pwr);
 
         let mut status_led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-        status_led.set_low();
+        status_led.set_low().unwrap();
 
         let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
@@ -144,7 +159,7 @@ const APP: () = {
 
 
         let mut rtc = Rtc::rtc(dp.RTC, &mut backup_domain);
-        rtc.select_frequency(1.hz());
+        rtc.select_frequency(10.hz());
         rtc.listen_alarm();
 
         // Initialise rainmeter
@@ -183,6 +198,7 @@ const APP: () = {
             exti,
             scb: cp.SCB,
             pwr,
+            errors: latest_queue::LatestQueue::new(),
         }
     }
 
@@ -217,21 +233,34 @@ const APP: () = {
         exti,
         rainmeter_counter,
         bmp,
+        errors,
     ])]
     fn on_rtc_alarm(ctx: on_rtc_alarm::Context) {
         let r = ctx.resources;
 
-        // Clear the pending bit
-        r.exti.pr.modify(|_r, w| w.pr17().set_bit());
-
-        // TODO: Remove once runnign on HW
-        // hprintln!("T");
-        let reading = r.bmp.read().unwrap();
-
-
         // clear the alarm
         r.rtc.set_time(0);
         r.rtc.clear_alarm_flag();
+        // Clear the pending bit
+        r.exti.pr.modify(|_r, w| w.pr17().set_bit());
+
+        let mut messages: Vec<_, consts::U10> = Vec::new();
+
+
+        // NOTE: This block is kind of strange. It is *not* blocking for read, it is blockign for
+        // the i2c error, which in reality *should* never be WouldBlock
+        match block!(r.bmp.read()) {
+            Ok(val) => {
+                messages.push(Message::Reading(
+                    SensorReading::Temperature(val.temperature.into())
+                )).unwrap();
+                messages.push(Message::Reading(
+                    SensorReading::Pressure(val.pressure.into())
+                )).unwrap();
+            },
+            Err(e) => r.errors.push(Error::BmpReadError(e))
+        };
+
 
         // Transmit a ping
         // NOTE: Safe unwrap because we'll make sure to put this back
@@ -239,16 +268,39 @@ const APP: () = {
         // we'll have a fun issue to debug
         let nrf = r.nrf.take().unwrap();
 
-        let mut nrf = nrf.tx().expect("Failed to go to TX mode");
+        match nrf.tx() {
+            Ok(mut nrf) => {
+                for message in messages {
+                    // This error will most likely be unrecoverable which is why
+                    // it is not stored
+                    try_or_log(
+                        postcard::to_vec::<consts::U128, _>(&message),
+                        r.errors,
+                        Error::EncodingError
+                    )
+                        .and_then(|bytes| {
+                            try_or_log(nrf.send(&bytes), r.errors, Error::NrfTxError)
+                        })
+                        .and_then(|_| {
+                            try_or_log(
+                                block!(nrf.poll_send()),
+                                r.errors,
+                                |_| Error::TransmitFailure
+                            )
+                        });
+                }
 
-        let message = serde_json_core::to_vec::<consts::U32, _>(&reading.temperature)
-            .unwrap();
-        nrf.send(&message)
-            .expect("Failed to send hello world");
-        let _success = block!(nrf.poll_send()).expect("Poll error");
-        // if !success {}
-
-        *r.nrf = Some(nrf.standby().expect("Failed to go back to standby mode"));
+                // Recovering this error will be very difficult because we can not store a standby
+                // mode device
+                *r.nrf = Some(
+                    nrf.standby().expect("Failed to go back to standby mode")
+                )
+            }
+            Err((standby, err)) => {
+                r.errors.push(Error::NrfModeError(err));
+                *r.nrf = Some(StandbyMode::power_up(standby).expect("Failed to power device back up"))
+            }
+        }
     }
 
     #[task(binds=EXTI0, resources=[rainmeter_pin, rainmeter_counter])]
@@ -281,3 +333,19 @@ fn stop_mode(
     asm::nop();
     // asm::bkpt();
 }
+
+
+fn try_or_log<T, E>(
+    result: Result<T, E>,
+    errors: &mut latest_queue::LatestQueue<Error, consts::U10>,
+    descriptor: impl Fn(E) -> Error,
+) -> Option<T> {
+    match result {
+        Ok(val) => Some(val),
+        Err(e) => {
+            errors.push(descriptor(e));
+            None
+        }
+    }
+}
+
