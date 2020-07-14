@@ -14,25 +14,35 @@ use cortex_m::asm;
 use stm32f1xx_hal::{
     prelude::*,
     gpio::{
-        gpioa::{PA4, PA3, PA5, PA6, PA7},
+        gpioa::{self, PA0, PA4, PA3, PA5, PA6, PA7},
+        gpiob::{PB6, PB7},
         Output,
         PushPull,
         Alternate,
         Input,
         Floating,
+        PullUp,
+        ExtiPin,
+        Edge,
+        OpenDrain,
     },
     delay::Delay,
-    pac::{PWR, EXTI, SPI1},
+    pac::{PWR, EXTI, SPI1, I2C1},
     spi::{Spi, Spi1NoRemap},
     rtc::Rtc,
+    i2c::{self, BlockingI2c},
 };
 
 use embedded_nrf24l01 as nrf;
 use nrf::{StandbyMode, NRF24L01};
 
+use bmp085_driver as bmp;
+use bmp::Bmp085;
+
+use heapless::consts;
+
 use common::nrf::setup_nrf;
 
-// pub type EspType = Esp8266<Tx<USART1>, Rx<USART1>, LongTimer<TIM2>, PA8<Output<PushPull>>>;
 pub type NrfType = NRF24L01<
     core::convert::Infallible,
     PA4<Output<PushPull>>,
@@ -44,16 +54,23 @@ pub type NrfType = NRF24L01<
     >
 >;
 
+pub type BmpType = Bmp085<
+    BlockingI2c<I2C1, (PB6<Alternate<OpenDrain>>, PB7<Alternate<OpenDrain>>)>,
+    Delay,
+>;
+
 #[app(device = stm32f1xx_hal::pac, peripherals = true)]
 const APP: () = {
     struct Resources {
         nrf: Option<StandbyMode<NrfType>>,
+        bmp: BmpType,
         rtc: Rtc,
+        rainmeter_pin: PA0<Input<PullUp>>,
+        rainmeter_counter: usize,
         // Required for sleep
         exti: EXTI,
         scb: cortex_m::peripheral::SCB,
         pwr: PWR,
-
     }
 
     #[init]
@@ -64,9 +81,11 @@ const APP: () = {
         let mut flash = dp.FLASH.constrain();
         let mut rcc = dp.RCC.constrain();
         let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
+        let mut gpiob = dp.GPIOB.split(&mut rcc.apb2);
         let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
         let mut afio = dp.AFIO.constrain(&mut rcc.apb2);
         let mut pwr = dp.PWR;
+        let mut exti = dp.EXTI;
 
 
         let mut backup_domain = rcc.bkp.constrain(dp.BKP, &mut rcc.apb1, &mut pwr);
@@ -123,16 +142,45 @@ const APP: () = {
                 .expect("Failed to go back to standby mode")
         };
 
-        status_led.set_high().unwrap();
 
         let mut rtc = Rtc::rtc(dp.RTC, &mut backup_domain);
         rtc.select_frequency(1.hz());
         rtc.listen_alarm();
 
+        // Initialise rainmeter
+        let mut rainmeter_pin = gpioa.pa0.into_pull_up_input(&mut gpioa.crl);
+        rainmeter_pin.make_interrupt_source(&mut afio);
+        rainmeter_pin.trigger_on_edge(&mut exti, Edge::FALLING);
+        rainmeter_pin.enable_interrupt(&mut exti);
+
+        let bmp_pins = (
+                gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl),
+                gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl),
+            );
+        let i2c = BlockingI2c::i2c1(
+                dp.I2C1,
+                bmp_pins,
+                &mut afio.mapr,
+                i2c::Mode::Standard{frequency: 100_000.hz()},
+                clocks,
+                &mut rcc.apb1,
+                100,
+                1,
+                100,
+                100,
+            );
+        let bmp = bmp::Bmp085::new(i2c, delay, bmp::Oversampling::Standard)
+            .unwrap();
+
+        status_led.set_high().unwrap();
+
         init::LateResources {
             nrf: Some(nrf),
+            bmp,
+            rainmeter_pin,
+            rainmeter_counter: 0,
             rtc,
-            exti: dp.EXTI,
+            exti,
             scb: cp.SCB,
             pwr,
         }
@@ -163,7 +211,13 @@ const APP: () = {
         }
     }
 
-    #[task(binds = RTCALARM, resources=[nrf, rtc, exti])]
+    #[task(binds = RTCALARM, resources=[
+        nrf,
+        rtc,
+        exti,
+        rainmeter_counter,
+        bmp,
+    ])]
     fn on_rtc_alarm(ctx: on_rtc_alarm::Context) {
         let r = ctx.resources;
 
@@ -172,6 +226,8 @@ const APP: () = {
 
         // TODO: Remove once runnign on HW
         // hprintln!("T");
+        let reading = r.bmp.read().unwrap();
+
 
         // clear the alarm
         r.rtc.set_time(0);
@@ -185,12 +241,20 @@ const APP: () = {
 
         let mut nrf = nrf.tx().expect("Failed to go to TX mode");
 
-        nrf.send(b"Timer")
+        let message = serde_json_core::to_vec::<consts::U32, _>(&reading.temperature)
+            .unwrap();
+        nrf.send(&message)
             .expect("Failed to send hello world");
         let _success = block!(nrf.poll_send()).expect("Poll error");
         // if !success {}
 
         *r.nrf = Some(nrf.standby().expect("Failed to go back to standby mode"));
+    }
+
+    #[task(binds=EXTI0, resources=[rainmeter_pin, rainmeter_counter])]
+    fn on_rainmeter_toggle(ctx: on_rainmeter_toggle::Context) {
+        ctx.resources.rainmeter_pin.clear_interrupt_pending_bit();
+        *ctx.resources.rainmeter_counter += 1;
     }
 };
 

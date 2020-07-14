@@ -16,3 +16,9 @@
 [submodule "basestation/rppal"]
 	path = basestation/rppal
 	url = git@github.com:golemparts/rppal.git
+[submodule "rtic_hardware/stm32f1xx-hal"]
+	path = rtic_hardware/stm32f1xx-hal
+	url = git@github.com:TheZoq2/stm32f1xx-hal.git
+[submodule "rtic_hardware/embedded-time"]
+	path = rtic_hardware/embedded-time
+	url = git@github.com:FluenTech/embedded-time.git
