@@ -16,7 +16,7 @@ use cortex_m::asm;
 use stm32f1xx_hal::{
     prelude::*,
     gpio::{
-        gpioa::{self, PA0, PA4, PA3, PA5, PA6, PA7},
+        gpioa::{PA0, PA1, PA4, PA3, PA5, PA6, PA7},
         gpiob::{PB6, PB7},
         Output,
         PushPull,
@@ -27,12 +27,15 @@ use stm32f1xx_hal::{
         ExtiPin,
         Edge,
         OpenDrain,
+        Analog,
     },
+    adc::Adc,
     delay::Delay,
-    pac::{PWR, EXTI, SPI1, I2C1},
+    pac::{PWR, EXTI, SPI1, I2C1, ADC1},
     spi::{self, Spi, Spi1NoRemap},
     rtc::Rtc,
     i2c::{self, BlockingI2c},
+    rcc::{self, Clocks},
 };
 
 use embedded_nrf24l01 as nrf;
@@ -47,6 +50,10 @@ use heapless::{Vec, HistoryBuffer, ArrayLength};
 use common::nrf::setup_nrf;
 use common::{Message, SensorReading};
 
+use core::fmt::Write;
+
+const SLEEP_DURATION: u32 = 10;
+
 #[derive(Debug)]
 pub enum Error {
     TransmitFailure,
@@ -55,6 +62,7 @@ pub enum Error {
     NrfTxError(nrf::Error<spi::Error>),
     NrfPollError(nrf::Error<spi::Error>),
     EncodingError(postcard::Error),
+    FmtErr(core::fmt::Error),
 }
 
 pub type NrfType = NRF24L01<
@@ -86,6 +94,11 @@ const APP: () = {
         scb: cortex_m::peripheral::SCB,
         pwr: PWR,
         errors: latest_queue::LatestQueue<Error, consts::U10>,
+        // Required for the ADC
+        adc: Option<ADC1>,
+        apb2: rcc::APB2,
+        adc_pin: PA1<Analog>,
+        clocks: Clocks,
     }
 
     #[init]
@@ -108,7 +121,9 @@ const APP: () = {
         let mut status_led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
         status_led.set_low().unwrap();
 
-        let clocks = rcc.cfgr.freeze(&mut flash.acr);
+        let clocks = rcc.cfgr
+            .freeze(&mut flash.acr);
+
 
         let mut delay = Delay::new(cp.SYST, clocks);
 
@@ -159,7 +174,7 @@ const APP: () = {
 
 
         let mut rtc = Rtc::rtc(dp.RTC, &mut backup_domain);
-        rtc.select_frequency(10.hz());
+        rtc.select_frequency(1.hz());
         rtc.listen_alarm();
 
         // Initialise rainmeter
@@ -184,6 +199,7 @@ const APP: () = {
                 100,
                 100,
             );
+
         let bmp = bmp::Bmp085::new(i2c, delay, bmp::Oversampling::Standard)
             .unwrap();
 
@@ -199,6 +215,10 @@ const APP: () = {
             scb: cp.SCB,
             pwr,
             errors: latest_queue::LatestQueue::new(),
+            adc: Some(dp.ADC1),
+            apb2: rcc.apb2,
+            adc_pin: gpioa.pa1.into_analog(&mut gpioa.crl),
+            clocks,
         }
     }
 
@@ -208,7 +228,7 @@ const APP: () = {
         loop {
             r.rtc.lock(|rtc| {
                 rtc.set_time(0);
-                rtc.set_alarm(2);
+                rtc.set_alarm(SLEEP_DURATION);
                 rtc.clear_alarm_flag();
             });
 
@@ -234,6 +254,10 @@ const APP: () = {
         rainmeter_counter,
         bmp,
         errors,
+        adc,
+        apb2,
+        clocks,
+        adc_pin,
     ])]
     fn on_rtc_alarm(ctx: on_rtc_alarm::Context) {
         let r = ctx.resources;
@@ -261,8 +285,18 @@ const APP: () = {
             Err(e) => r.errors.push(Error::BmpReadError(e))
         };
 
+        let (battery, adc) = measure_battery(
+            r.adc.take().unwrap(),
+            r.adc_pin,
+            r.apb2,
+            *r.clocks
+        );
+        *r.adc = Some(adc);
+        messages.push(Message::Reading(SensorReading::Battery(battery)))
+            .unwrap();
 
-        // Transmit a ping
+
+        // Transmit the messages
         // NOTE: Safe unwrap because we'll make sure to put this back
         // NOTE: Actually unsafe, if we take the NRF out elsewhere, in an interrupt,
         // we'll have a fun issue to debug
@@ -273,21 +307,30 @@ const APP: () = {
                 for message in messages {
                     // This error will most likely be unrecoverable which is why
                     // it is not stored
-                    try_or_log(
-                        postcard::to_vec::<consts::U128, _>(&message),
-                        r.errors,
-                        Error::EncodingError
-                    )
-                        .and_then(|bytes| {
-                            try_or_log(nrf.send(&bytes), r.errors, Error::NrfTxError)
-                        })
-                        .and_then(|_| {
-                            try_or_log(
-                                block!(nrf.poll_send()),
-                                r.errors,
-                                |_| Error::TransmitFailure
-                            )
-                        });
+                    try_or_log(send_message(&message, &mut nrf), r.errors, |x| x);
+                }
+
+                let mut err_transmit_err = None;
+                for error in &r.errors.inner {
+                    // This error will most likely be unrecoverable which is why
+                    // it is not stored
+                    let mut s = heapless::String::<consts::U64>::new();
+                    if let Err(e) = write!(s, "{:?}", error) {
+                        err_transmit_err = Some(Error::FmtErr(e))
+                    }
+                    if let Err(e) = send_message(&Message::Error(&s), &mut nrf) {
+                        err_transmit_err = Some(e);
+                        break
+                    }
+                };
+
+                if let Some(e) = err_transmit_err {
+                    r.errors.push(e)
+                }
+                else {
+                    // Since we transmitted all errors without failure, we can
+                    // clear the list now
+                    r.errors.clear()
                 }
 
                 // Recovering this error will be very difficult because we can not store a standby
@@ -349,3 +392,38 @@ fn try_or_log<T, E>(
     }
 }
 
+
+fn send_message(message: &Message, nrf: &mut nrf::TxMode<NrfType>)
+    -> Result<(), Error>
+{
+    let bytes = postcard::to_vec::<consts::U128, _>(message)
+        .map_err(Error::EncodingError)?;
+
+    nrf.send(&bytes)
+        .map_err(Error::NrfTxError)?;
+
+    let success = block!(nrf.poll_send())
+        .map_err(Error::NrfPollError)?;
+
+    if !success {
+        Err(Error::TransmitFailure)
+    }
+    else {
+        Ok(())
+    }
+}
+
+
+fn measure_battery(
+    adc: ADC1,
+    pin: &mut PA1<Analog>,
+    apb2: &mut rcc::APB2,
+    clocks: Clocks
+) -> (f32, ADC1) {
+    let mut adc = Adc::adc1(adc, apb2, clocks);
+
+    let reading: u16 = block!(adc.read(pin)).unwrap();
+    let value = reading as f32 / adc.max_sample() as f32;
+
+    (value, adc.release(apb2))
+}

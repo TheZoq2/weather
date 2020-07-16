@@ -1,7 +1,7 @@
 use heapless::{Vec, ArrayLength};
 
 pub struct LatestQueue<T, N: ArrayLength<(u16, T)>> {
-    inner: Vec<(u16, T), N>,
+    pub inner: Vec<(u16, T), N>,
     next: u16,
 }
 

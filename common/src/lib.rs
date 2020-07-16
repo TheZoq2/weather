@@ -26,6 +26,7 @@ impl From<bno::Pascal> for Pascal {
 pub enum SensorReading {
     Pressure(Pascal),
     Temperature(DeciCelcius),
+    Battery(f32),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
