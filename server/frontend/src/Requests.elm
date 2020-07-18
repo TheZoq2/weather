@@ -1,19 +1,18 @@
 module Requests exposing (..)
 
 import Json.Decode as Decode
-import Time exposing (Time, second)
 import Http
 import Msg exposing (Msg(..))
 
-decodeTemperatures : Decode.Decoder (List (Time, Float))
+decodeTemperatures : Decode.Decoder (List (Int, Float))
 decodeTemperatures =
     let
-        timestampDecoder = Decode.field "timestamp" (Decode.map ((*) Time.second) Decode.float)
+        timestampDecoder = Decode.field "timestamp" (Decode.map (\x -> round (x * 1000)) Decode.float)
         valueDecoder = Decode.field "value" Decode.float
     in
-        Decode.list <| Decode.map2 (,) timestampDecoder valueDecoder
+        Decode.list <| Decode.map2 Tuple.pair timestampDecoder valueDecoder
 
-getValues : String -> String -> Http.Request (List (Time, Float))
+getValues : String -> String -> Http.Request (List (Int, Float))
 getValues url name =
     Http.get ("http://" ++ url ++ "/data/" ++ name) decodeTemperatures
 

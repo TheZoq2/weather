@@ -1,11 +1,11 @@
-module Constants exposing (day, week)
+module Constants exposing (day, week, hour)
 
-import Time exposing (Time)
+-- A day in milliseconds
+hour : Int
+hour = 60*60*1000
 
-day : Time
-day =
-    Time.hour * 24
+day : Int
+day = hour * 24
 
-week : Time
-week =
-    day * 7
+week : Int
+week = day * 7

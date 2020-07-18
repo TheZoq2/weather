@@ -1,17 +1,14 @@
 module Main exposing (..) 
 
 import Html exposing (..)
-import Html.Events
-import Time exposing (Time, second)
-import Svg
+import Time exposing (Posix)
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Dict exposing (Dict)
-import List.Extra
-import Navigation
-import Style
+import Browser.Navigation
+import Browser
+import Url exposing (Url)
 
-import Graph
 import Time
 import Msg exposing (Msg(..))
 import Model exposing (Model)
@@ -23,8 +20,8 @@ import Constants exposing (day)
 
 
 
-init : Navigation.Location -> (Model, Cmd Msg)
-init location =
+init : () -> Url -> Browser.Navigation.Key -> (Model, Cmd Msg)
+init _ location _ =
     ( { values = Dict.empty
       , listedData = []
       , availableData = []
@@ -40,9 +37,9 @@ update msg model =
     case msg of
         ValuesReceived name values ->
             case values of
-                Ok values ->
+                Ok values_ ->
                     let
-                        newValues = Dict.insert name values model.values
+                        newValues = Dict.insert name values_ model.values
                     in
                         ({model | values = newValues}, Cmd.none)
                 Err e ->
@@ -53,7 +50,7 @@ update msg model =
         Tick time ->
             let
                 requests = sendAvailableDataQuery model.url
-                    :: (List.map (sendValueRequest model.url) model.listedData)
+                    :: List.map (sendValueRequest model.url) model.listedData
             in
                 (model, Cmd.batch requests)
         AvailableDataReceived data ->
@@ -82,34 +79,44 @@ update msg model =
                 ({model | listedData = newListed, values = newValues}, Cmd.none)
         UrlChanged location ->
             let
-                _ = Debug.log "location.hash" location.hash
+                _ = Debug.log "location.fragment" location.fragment
             in
                 ({model | url = serverUrlFromLocation location}, Cmd.none)
         TimeRangeChanged time ->
             ({model | timeRange = time}, Cmd.none)
+        Dummy ->
+            (model, Cmd.none)
 
 
 
 
-serverUrlFromLocation : Navigation.Location -> String
+serverUrlFromLocation : Url -> String
 serverUrlFromLocation location =
-    case String.uncons location.hash of
-        Just (hash, url) -> url
-        Nothing -> location.host
+    case location.fragment of
+        Just url -> url
+        Nothing ->
+            let
+                p = Maybe.withDefault ""
+                    <| Maybe.map ((++) ":")
+                    <| Maybe.map String.fromInt
+                    <| location.port_
+            in
+            location.host ++ p
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    Time.every second Tick
+subscriptions _ =
+    Time.every 1000 Tick
 
 
-main : Program Never Model Msg
+main : Program () Model Msg
 main =
-    Navigation.program
-        UrlChanged
+    Browser.application
         { init = init
         , update = update
         , view = View.view
         , subscriptions = subscriptions
+        , onUrlRequest = \_ -> Dummy
+        , onUrlChange = UrlChanged
         }
 
 

@@ -2,6 +2,7 @@ module Style exposing (..)
 
 -- Standard library imports
 import Dict exposing (Dict)
+import String exposing (fromFloat)
 
 -- External imports
 import Css exposing (..)
@@ -102,7 +103,7 @@ singleValue symbol value unit =
     in
         styled div divStyle []
             [ styled span symbolStyle [] [text symbol]
-            , styled span valueStyle [] [text <| toString value]
+            , styled span valueStyle [] [text <| fromFloat value]
             , styled span unitStyle [] [text unit]
             ]
 
