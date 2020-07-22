@@ -105,7 +105,7 @@ fn main() -> Result<()> {
 
 
     let listener = TcpListener::bind(&format!("{}:{}", config.tcp_address, config.tcp_port))
-        .unwrap();
+        .context("Failed to start server")?;
 
     info!("Listener started, waiting for connections on port 2000");
 

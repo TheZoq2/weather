@@ -8,6 +8,8 @@ use std::io::prelude::*;
 
 use crate::types::ReadingCollection;
 
+use color_anyhow::anyhow::Context;
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -16,19 +18,10 @@ pub enum WebError {
     NoSuchDataName(String),
     #[error("Unahndled uri: {0}")]
     UnhandledURI(String),
-    #[error("JSON error")]
-    Json(
-        #[from]
-        serde_json::error::Error
-    ),
-    #[error("IO error")]
-    Io (
-        #[from]
-        std::io::Error,
-    )
 }
 
-pub type Result<T> = std::result::Result<T, WebError>;
+// pub type Result<T> = std::result::Result<T, WebError>;
+pub type Result<T> = color_anyhow::anyhow::Result<T>;
 
 fn handle_data_request_query(
     request_path_parts: &[&str],
@@ -40,7 +33,7 @@ fn handle_data_request_query(
         let data = readings.get(*name)
             .ok_or(WebError::NoSuchDataName(name.to_string()))?;
 
-        Ok(serde_json::to_string(&data)?)
+        Ok(serde_json::to_string(&data).context("Failed to encode data")?)
     }
     // Otherwise return a list of available data
     else {
@@ -50,8 +43,9 @@ fn handle_data_request_query(
     }
 }
 
-fn handle_index_request() -> Result<String> {
-    let mut file = File::open("frontend/output/index.html")?;
+fn handle_index_request() -> color_anyhow::anyhow::Result<String> {
+    let mut file = File::open("frontend/output/index.html")
+        .context("Failed to open fronted/output/index.html")?;
 
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
@@ -77,6 +71,7 @@ pub fn run_server(listen_address: String, port: u16, readings: ReadingCollection
         let request_response = match handled {
             Ok(val) => val,
             Err(e) => {
+                log!(log::Level::Error, "{:#?}" ,e);
                 response.status(StatusCode::NOT_FOUND);
                 format!("{}", e)
             }
