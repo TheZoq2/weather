@@ -16,8 +16,6 @@ extern crate simple_server;
 extern crate http;
 extern crate chrono;
 #[macro_use]
-extern crate error_chain;
-#[macro_use]
 extern crate log;
 extern crate fern;
 
@@ -30,6 +28,9 @@ mod error;
 mod config;
 mod tcp_handler;
 mod constants;
+
+#[cfg(feature = "raspi_nrf")]
+mod nrf24l01_reader;
 
 use fern::colors::{Color, ColoredLevelConfig};
 
@@ -78,12 +79,12 @@ fn main() {
             config.log_filename,
             Arc::clone(&reading_collection)
         );
-    // dummy_data::sin_provider(
-    //         tx.clone(),
-    //         "temperature".into(),
-    //         20.,
-    //         10.
-    //     );
+    dummy_data::sin_provider(
+            tx.clone(),
+            "temperature".into(),
+            20.,
+            10.
+        );
     web::run_server(
             config.http_address.clone(),
             config.http_port,

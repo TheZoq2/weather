@@ -1,5 +1,5 @@
 use std::path::{PathBuf, Path};
-use error::Result;
+use crate::error::Result;
 
 use std::fs::File;
 use std::io::prelude::*;

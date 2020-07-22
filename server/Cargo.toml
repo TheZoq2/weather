@@ -3,6 +3,8 @@ name = "server"
 version = "0.1.0"
 authors = ["TheZoq2 <frans.skarman@gmail.com>"]
 
+edition = "2018"
+
 [dependencies]
 simple-server = "0.4.0"
 serde = "1.0.25"
@@ -14,10 +16,17 @@ serde_json = "1.0.8"
 serde_derive = "1.0.27"
 toml = "0.4"
 
-error-chain = "0.11"
-
 log = "0.4"
 fern = {version = "0.5", features = ["colored"]}
 
+thiserror = "1.0"
+anyhow = "1.0"
 
-# clippy = "*"
+# RPPAL related dependencies
+rppal = { path = "../rppal", features = ["hal"]}
+embedded-hal = {version = "0.2.4", optional = true}
+embedded-nrf24l01 = {version = "0.1.0", optional = true}
+
+[features]
+raspi_nrf = ["embedded-hal", "embedded-nrf24l01"]
+default = ["raspi_nrf"]

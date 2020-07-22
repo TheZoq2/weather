@@ -14,7 +14,7 @@
 	path = rtic_hardware/embedded-nrf24l01
 	url = git@github.com:astro/embedded-nrf24l01.git
 [submodule "basestation/rppal"]
-	path = basestation/rppal
+	path = rppal
 	url = git@github.com:golemparts/rppal.git
 [submodule "rtic_hardware/stm32f1xx-hal"]
 	path = rtic_hardware/stm32f1xx-hal

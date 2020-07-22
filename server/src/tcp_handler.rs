@@ -6,8 +6,8 @@ use std::thread;
 
 use std::io::Read;
 
-use types::{Command};
-use constants::OPERATION_PREFIX;
+use crate::types::Command;
+use crate::constants::OPERATION_PREFIX;
 
 pub fn tcp_handler(listener: TcpListener, tx_arc_mutex: Arc<Mutex<Sender<Command>>>) {
     for stream in listener.incoming() {

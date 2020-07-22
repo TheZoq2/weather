@@ -7,8 +7,8 @@ use std::io::prelude::*;
 use std::io::Write;
 
 use serde_json;
-use error::Result;
-use types::{ReadingCollection, Datapoint};
+use crate::error::Result;
+use crate::types::{ReadingCollection, Datapoint};
 
 
 pub fn run_logger(interval: Duration, file: PathBuf, readings: ReadingCollection) {

@@ -6,9 +6,29 @@ use std::thread;
 use std::fs::File;
 use std::io::prelude::*;
 
-use types::ReadingCollection;
+use crate::types::ReadingCollection;
 
-use error::{Result, ErrorKind};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum WebError {
+    #[error("Unknown data name {0}")]
+    NoSuchDataName(String),
+    #[error("Unahndled uri: {0}")]
+    UnhandledURI(String),
+    #[error("JSON error")]
+    Json(
+        #[from]
+        serde_json::error::Error
+    ),
+    #[error("IO error")]
+    Io (
+        #[from]
+        std::io::Error,
+    )
+}
+
+pub type Result<T> = std::result::Result<T, WebError>;
 
 fn handle_data_request_query(
     request_path_parts: &[&str],
@@ -18,9 +38,9 @@ fn handle_data_request_query(
     if let Some(name) = request_path_parts.get(2) {
         let readings = readings.lock().unwrap();
         let data = readings.get(*name)
-            .ok_or(ErrorKind::NoSuchDataName(name.to_string()));
+            .ok_or(WebError::NoSuchDataName(name.to_string()))?;
 
-        Ok(serde_json::to_string(&data?)?)
+        Ok(serde_json::to_string(&data)?)
     }
     // Otherwise return a list of available data
     else {
@@ -51,7 +71,7 @@ pub fn run_server(listen_address: String, port: u16, readings: ReadingCollection
             "data" => {
                 (handle_data_request_query(&request_path_parts, &readings), "text/plain")
             }
-            _ => (Err(ErrorKind::UnhandledURI(request_path.to_string()).into()), "text/plain")
+            _ => (Err(WebError::UnhandledURI(request_path.to_string()).into()), "text/plain")
         };
 
         let request_response = match handled {

@@ -1,7 +1,9 @@
-use types::{ReadingCollection, Datapoint, Command};
 use std::thread;
 use std::sync::mpsc::Receiver;
+
 use chrono::{Utc};
+
+use crate::types::{ReadingCollection, Datapoint, Command};
 
 pub fn handle_datapoint((name,value,timestamp): (String, f32, Option<f64>), readings: &ReadingCollection) {
     let timestamp = timestamp.unwrap_or(Utc::now().timestamp() as f64);
