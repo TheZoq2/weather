@@ -22,6 +22,8 @@ fern = {version = "0.5", features = ["colored"]}
 thiserror = "1.0"
 anyhow = "1.0"
 
+color-anyhow = {git = "https://github.com/yaahc/color-anyhow"}
+
 # RPPAL related dependencies
 rppal = { path = "../rppal", features = ["hal"]}
 embedded-hal = {version = "0.2.4", optional = true}

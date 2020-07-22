@@ -34,7 +34,14 @@ mod nrf24l01_reader;
 
 use fern::colors::{Color, ColoredLevelConfig};
 
-fn main() {
+use error::Result;
+use color_anyhow::anyhow::{Context};
+// use color_anyhow::anyhow::{Context, Result};
+
+fn main() -> Result<()> {
+    color_anyhow::install()
+        .expect("failed to install color-anyhow panic handler");
+
     // Configure terminal logger
     fern::Dispatch::new()
         // Perform allocation-free log formatting
@@ -60,12 +67,13 @@ fn main() {
         // Output to stdout, files, and other Dispatch configurations
         .chain(std::io::stdout())
         // Apply globally
-        .apply().unwrap();
+        .apply()?;
 
     ////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////
 
-    let config = config::read_config(&PathBuf::from("config.toml")).unwrap();
+    let config = config::read_config(&PathBuf::from("config.toml"))
+        .context("Failed to read config.toml")?;
 
     let reading_collection = Arc::new(Mutex::new(
         logger::load_data(&config.log_filename).unwrap_or_else(|_| HashMap::new())
@@ -103,6 +111,8 @@ fn main() {
 
     let tx_arc_mutex = Arc::new(Mutex::new(tx));
     tcp_handler::tcp_handler(listener, tx_arc_mutex);
+
+    Ok(())
 }
 
 

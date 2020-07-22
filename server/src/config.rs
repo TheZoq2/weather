@@ -4,6 +4,8 @@ use crate::error::Result;
 use std::fs::File;
 use std::io::prelude::*;
 
+use color_anyhow::anyhow::Context;
+
 use toml;
 
 #[derive(Deserialize)]
@@ -16,9 +18,11 @@ pub struct Config {
 }
 
 pub fn read_config(config_path: &Path) -> Result<Config> {
-    let mut file = File::open(config_path)?;
+    let mut file = File::open(config_path)
+        .with_context(|| format!("Failed to open {:?}", config_path))?;
     let mut content = String::new();
-    file.read_to_string(&mut content)?;
+    file.read_to_string(&mut content)
+        .with_context(|| format!("Failed to read from {:?}", config_path))?;
 
     Ok(toml::from_str(&content)?)
 }

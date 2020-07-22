@@ -1,3 +1,3 @@
 
-pub type Result<T> = anyhow::Result<T>;
+pub type Result<T> = color_anyhow::anyhow::Result<T>;
 
